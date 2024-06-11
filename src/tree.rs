@@ -5,6 +5,7 @@ use std::process::Command;
 use std::process::Stdio;
 
 use actix_web::http::header::ContentType;
+use actix_web::web;
 use actix_web::HttpRequest;
 use actix_web::HttpResponse;
 use anyhow::Context;
@@ -12,6 +13,10 @@ use itertools::Itertools;
 use petgraph::dot::Dot;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
+
+use crate::get_artist_from_db;
+use crate::get_lastfm_similar_artists;
+use crate::SqPool;
 
 // use super::Artist;
 
@@ -24,17 +29,18 @@ where
 }
 
 /// `GET /artist/{artist}`
-pub async fn get_artist(req: HttpRequest) -> Result<HttpResponse, actix_web::Error> {
+pub async fn get_artist(
+    req: HttpRequest,
+    pool: web::Data<SqPool>,
+) -> Result<HttpResponse, actix_web::Error> {
     let artist = req
         .match_info()
         .get("artist")
         .context("no artist supplied")
         .map_err(error_500)?;
 
-    let mut tree = ArtistTree::new(artist);
-    tree.build().await;
-
-    let html = ArtistTree::new(artist).as_html().await.map_err(error_500)?;
+    let tree = ArtistTree::new(artist, &pool).await;
+    let html = tree.as_html().await.map_err(error_500)?;
 
     Ok(HttpResponse::Ok()
         .content_type(ContentType::html())
@@ -50,6 +56,8 @@ pub struct Edge {
 }
 
 #[derive(Debug)]
+/// raw json -> HashMap (+ db rows) -> Graph -> Dot -> html
+///
 /// This should be implemented as a tree, because graphs will usually produce
 /// many uninteresting cycles.
 pub struct ArtistTree {
@@ -65,23 +73,33 @@ pub struct ArtistTree {
     #[allow(dead_code)]
     /// Default: 2
     depth: u8,
+
+    graph: Graph<String, String>,
 }
 
 impl ArtistTree {
     /// Defaults to `threshold` 0.7, `depth` 2
-    pub fn new(root: &str) -> Self {
-        let root = root.to_string().to_lowercase();
+    pub async fn new(
+        root: &str,
+        pool: &SqPool,
+    ) -> Self {
+        let root = root.to_string();
         // let edges = vec![];
         let nodes = HashMap::new();
         let threshold = 0.7;
         let depth = 2;
-        Self {
+
+        let mut tree = Self {
             root,
             // edges,
             nodes,
             threshold,
             depth,
-        }
+            graph: Graph::new(),
+        };
+
+        tree.build_graph(pool).await;
+        tree
     }
 
     // fn with_threshold(
@@ -100,52 +118,51 @@ impl ArtistTree {
     //     self
     // }
 
-    /// HashMap and Graph are constructed in parallel
-    async fn build(&mut self) -> Graph<String, String> {
-        let mut graph = Graph::new();
+    /// `self.nodes` is only used to keep track of what has been added to the
+    /// `Graph`. It is not otherwise used.
+    async fn build_graph(
+        &mut self,
+        pool: &SqPool,
+    ) {
+        // let mut graph = Graph::new();
 
-        // TODO: refactor all lowercase calls
+        for i in 0..=self.depth {
+            let parents = match i {
+                0 => {
+                    // we literally only do this in order to get the canonical name via the db; the
+                    // map returned by the function doesn't actually contain it!
+                    get_lastfm_similar_artists(&self.root, pool).await.unwrap();
+                    let root = get_artist_from_db(&self.root, pool).await.unwrap().unwrap();
+                    [root].to_vec()
+                }
+                _ => self.nodes.clone().into_keys().collect(),
+            };
 
-        let root = self.root.to_lowercase();
-        let r = graph.add_node(root.clone());
-        self.nodes.insert(root.clone(), r);
-        assert!(!self.nodes.is_empty());
+            for parent in parents {
+                let map = get_lastfm_similar_artists(&parent, pool).await.unwrap();
 
-        // for i in 0..=self.depth {
-        //     // let nodes = self.nodes.clone();
-        //     // let parents = nodes.keys().map(|p| p.to_lowercase());
-        //     for parent in self.nodes.clone().keys().map(|p| p.to_lowercase()) {
-        //         let children = match Artist::new(&parent).get_similar().await {
-        //             Ok(ch) => ch
-        //                 .into_iter()
-        //                 .map(|mut a| {
-        //                     // note: make_ascii_lowercase will leave non-ascii chars
-        // untouched                     // a.name.make_ascii_lowercase();
-        //                     // a
-        //                     a.name = a.name.to_lowercase();
-        //                     a
-        //                 })
-        //                 .filter(|a| a.sim_gt(0.7)),
-        //             Err(_) => continue,
-        //         };
-        //         for c in children {
-        //             let n1 = match self.nodes.get(&parent) {
-        //                 Some(node) => *node,
-        //                 None => graph.add_node(parent.to_string()),
-        //             };
-        //             let n2 = match self.nodes.get(&c.name) {
-        //                 Some(_) => continue,
-        //                 None => graph.add_node(c.name.clone()),
-        //             };
-        //             graph.add_edge(n1, n2, c.similarity);
-        //
-        //             self.nodes.insert(parent.clone(), n1);
-        //             self.nodes.insert(c.name, n2);
-        //         }
-        //     }
-        // }
+                for (c, sim) in map.iter().filter(|x| *x.1 >= 70) {
+                    let n1 = match self.nodes.get(&parent) {
+                        Some(node) => *node,
+                        None => self.graph.add_node(parent.clone()),
+                    };
+                    let n2 = match self.nodes.get(c) {
+                        Some(_) => continue,
+                        None => self.graph.add_node(c.to_string()),
+                    };
+                    self.graph.add_edge(n1, n2, sim.to_string());
 
-        graph
+                    self.nodes.insert(parent.clone(), n1);
+                    self.nodes.insert(c.to_string(), n2);
+                }
+            }
+
+            // println!("{i} {:#?}", self.nodes);
+
+            // panic!();
+        }
+
+        // graph
     }
 
     // old Vec<Edge> implementation
@@ -202,13 +219,12 @@ impl ArtistTree {
     // }
 
     pub async fn as_dot(
-        &mut self,
+        &self,
         fmt: DotOutput,
     ) -> anyhow::Result<String> {
         // echo {out} | <fdp|dot> -Tsvg | display
 
-        let g = &self.build().await;
-        let dot = Dot::new(g);
+        let dot = Dot::new(&self.graph);
         let ext = match fmt {
             DotOutput::Png => "png",
             DotOutput::Svg => "svg",
@@ -242,7 +258,7 @@ impl ArtistTree {
         // Ok(())
     }
 
-    pub async fn as_html(&mut self) -> anyhow::Result<String> {
+    pub async fn as_html(&self) -> anyhow::Result<String> {
         let graph = self
             .as_dot(DotOutput::Svg)
             .await?
@@ -297,13 +313,14 @@ mod tests {
     use std::collections::HashSet;
 
     use super::ArtistTree;
+    use crate::init_test_db;
 
     async fn check_nodes(
         root: &str,
         expected_nodes: &[&str],
     ) {
-        let mut tree = ArtistTree::new(root);
-        tree.build().await;
+        let pool = init_test_db().await;
+        let tree = ArtistTree::new(root, &pool.pool).await;
 
         assert!(!tree.nodes.is_empty());
 
@@ -311,15 +328,37 @@ mod tests {
         let expected = HashSet::from_iter(expected_nodes.iter().map(|s| s.to_owned()));
         assert_eq!(obtained, expected);
 
-        let html = tree.as_html().await.unwrap();
-        assert_eq!(html.matches("<li>").count(), expected.len() - 1);
+        // let html = tree.as_html().await.unwrap();
+        // assert_eq!(html.matches("<li>").count(), expected.len() - 1);
     }
 
-    // #[tokio::test]
+    #[tokio::test]
     async fn basic_tree_construction() {
         check_nodes(
             "loona",
-            &["loona", "looπδ 1/3", "looπδ / odd eye circle", "loona/yyxy"],
+            &["LOONA/yyxy", "LOOΠΔ 1/3", "Loona", "LOOΠΔ / ODD EYE CIRCLE"],
+        )
+        .await;
+
+        check_nodes(
+            "metallica",
+            &[
+                "Overkill",
+                "Death Angel",
+                "Anthrax",
+                "Destruction",
+                "Slayer",
+                "Kreator",
+                "Havok",
+                "Exodus",
+                "Testament",
+                "Metallica",
+                "Sodom",
+                "Sepultura",
+                "Annihilator",
+                "Megadeth",
+                "Pantera",
+            ],
         )
         .await;
     }

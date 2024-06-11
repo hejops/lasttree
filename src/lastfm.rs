@@ -47,6 +47,10 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
     })
 }
 
+/// Will fetch from db if `artist` has been cached.
+///
+/// Note: `artist` will **not** be included in the map's keys; the maximum
+/// similarity is 100.
 pub async fn get_lastfm_similar_artists(
     artist: &str,
     pool: &SqPool,
@@ -74,22 +78,19 @@ pub async fn get_lastfm_similar_artists(
     let json = raw_json
         .get("similarartists")
         .context("no similarartists")?;
-    let artist: LastfmArtist = serde_json::from_value(json.clone())?;
 
-    let canon_name: String = serde_json::from_value(
-        artist
-            .attr
-            .get("artist")
-            .context("no artist field")?
-            .clone(),
-    )?;
+    let root: LastfmArtist = serde_json::from_value(json.clone())?;
+    let canon_name: String =
+        serde_json::from_value(root.attr.get("artist").context("no artist field")?.clone())?;
     store_artist(&canon_name, pool).await?;
 
-    for sim in artist.similar_artists {
+    for sim in root.similar_artists {
         // store_artist(&sim.name, &pool).await?;
         store_artist_pair(&canon_name, &sim.name, sim.similarity, pool).await?;
-        map.insert(sim.name, sim.similarity as i64);
+        map.insert(sim.name, (sim.similarity * 100.0) as i64);
     }
+
+    // println!("{:#?} {artist}", map);
     // panic!();
 
     Ok(map)
@@ -98,49 +99,17 @@ pub async fn get_lastfm_similar_artists(
 #[cfg(test)]
 mod tests {
 
-    use std::fs;
-    use std::path::Path;
-
-    use uuid::Uuid;
-
-    use super::SqPool;
     use crate::get_artist_pairs;
     use crate::get_lastfm_similar_artists;
-    use crate::init_db;
-
-    pub struct TestPool {
-        pool: SqPool,
-        path: String,
-    }
-
-    /// custom `Drop` avoids clogging up your whatever dir when running lots of
-    /// tests
-    impl Drop for TestPool {
-        fn drop(&mut self) { fs::remove_file(&self.path).unwrap(); }
-    }
-
-    async fn init_test_db() -> TestPool {
-        let id = Uuid::new_v4();
-        // let path = format!("/tmp/test-{id}.db");
-        let path = format!("test-{id}.db");
-        if Path::new(&path).exists() {
-            fs::remove_file(&path).unwrap();
-        }
-        let pool = init_db(&format!("sqlite://{path}")).unwrap();
-        sqlx::migrate!().run(&pool).await.unwrap();
-        TestPool { pool, path }
-    }
+    use crate::init_test_db;
 
     #[tokio::test]
     async fn standard() {
         let t = init_test_db().await;
-        assert_eq!(
-            get_lastfm_similar_artists("loona", &t.pool)
-                .await
-                .unwrap()
-                .len(),
-            100
-        );
+
+        let retrieved = get_lastfm_similar_artists("loona", &t.pool).await.unwrap();
+        assert_eq!(retrieved.len(), 100);
+        assert_eq!(retrieved.values().max(), Some(&100));
 
         let stored = get_artist_pairs("loona", &t.pool).await.unwrap();
         assert_eq!(stored.len(), 100);
@@ -150,13 +119,12 @@ mod tests {
     #[tokio::test]
     async fn special_chars() {
         let t = init_test_db().await;
-        assert_eq!(
-            get_lastfm_similar_artists("loona 1/3", &t.pool)
-                .await
-                .unwrap()
-                .len(),
-            100
-        );
+
+        let retrieved = get_lastfm_similar_artists("loona 1/3", &t.pool)
+            .await
+            .unwrap();
+        assert_eq!(retrieved.len(), 100);
+        assert_eq!(retrieved.values().max(), Some(&100));
 
         let stored = get_artist_pairs("loona 1/3", &t.pool).await.unwrap();
         assert_eq!(stored.len(), 100);
