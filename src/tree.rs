@@ -319,8 +319,8 @@ mod tests {
         root: &str,
         expected_nodes: &[&str],
     ) {
-        let pool = init_test_db().await;
-        let tree = ArtistTree::new(root, &pool.pool).await;
+        let pool = &init_test_db().await.pool;
+        let tree = ArtistTree::new(root, pool).await;
 
         assert!(!tree.nodes.is_empty());
 

@@ -105,37 +105,35 @@ mod tests {
 
     #[tokio::test]
     async fn standard() {
-        let t = init_test_db().await;
+        let pool = &init_test_db().await.pool;
 
-        let retrieved = get_lastfm_similar_artists("loona", &t.pool).await.unwrap();
+        let retrieved = get_lastfm_similar_artists("loona", pool).await.unwrap();
         assert_eq!(retrieved.len(), 100);
         assert_eq!(retrieved.values().max(), Some(&100));
 
-        let stored = get_artist_pairs("loona", &t.pool).await.unwrap();
+        let stored = get_artist_pairs("loona", pool).await.unwrap();
         assert_eq!(stored.len(), 100);
         assert_eq!(stored.iter().filter(|e| e.similarity >= 70).count(), 3);
     }
 
     #[tokio::test]
     async fn special_chars() {
-        let t = init_test_db().await;
+        let pool = &init_test_db().await.pool;
 
-        let retrieved = get_lastfm_similar_artists("loona 1/3", &t.pool)
-            .await
-            .unwrap();
+        let retrieved = get_lastfm_similar_artists("loona 1/3", pool).await.unwrap();
         assert_eq!(retrieved.len(), 100);
         assert_eq!(retrieved.values().max(), Some(&100));
 
-        let stored = get_artist_pairs("loona 1/3", &t.pool).await.unwrap();
+        let stored = get_artist_pairs("loona 1/3", pool).await.unwrap();
         assert_eq!(stored.len(), 100);
         assert_eq!(stored.iter().filter(|e| e.similarity >= 70).count(), 3);
     }
 
     #[tokio::test]
     async fn cached_result() {
-        let t = init_test_db().await;
-        // TODO: test http requests -- Mock?
-        get_lastfm_similar_artists("loona", &t.pool).await.unwrap();
-        get_lastfm_similar_artists("loona", &t.pool).await.unwrap();
+        let pool = &init_test_db().await.pool;
+        // TODO: test that only 1 http request made -- Mock?
+        get_lastfm_similar_artists("loona", pool).await.unwrap();
+        get_lastfm_similar_artists("loona", pool).await.unwrap();
     }
 }
