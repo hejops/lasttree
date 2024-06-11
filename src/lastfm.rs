@@ -1,36 +1,30 @@
 use std::collections::HashMap;
-use std::env;
 use std::f64;
-use std::str::FromStr;
 
 use anyhow::Context;
 use serde::de;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde_json::Value;
-use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::sqlite::SqlitePoolOptions;
-use sqlx::Pool;
-use sqlx::Sqlite;
 
 use super::LASTFM_KEY;
-use crate::get_artist_from_db;
 use crate::store_artist_pair;
+use crate::SqPool;
 
-/// This struct is only for convenience when we iterate over the json array
+/// A convenience struct used when iterating over a json array
 #[derive(Deserialize, Debug, Clone)]
-pub struct Artist {
+struct Artist {
     pub name: String,
 
     /// Preserved as `String`, in order to be able to implement `Eq`
     #[serde(rename = "match", deserialize_with = "str_to_f64")]
     pub similarity: f64,
-
-    pub url: String,
+    // pub url: String,
 }
 
+/// Top-level
 #[derive(Deserialize, Debug, Clone)]
-pub struct LastfmArtist {
+struct LastfmArtist {
     #[serde(rename = "@attr")]
     attr: Value,
     #[serde(rename = "artist")]
@@ -49,21 +43,7 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
     })
 }
 
-pub fn init_db(db_url: &str) -> anyhow::Result<sqlx::Pool<Sqlite>> {
-    // to enable `sqlx migrate run`, ensure sqlx-cli is installed with the
-    // appropriate feature: cargo install sqlx-cli -F rustls,postgres,sqlite[,...]
-
-    // https://github.com/danbruder/twhn_api/blob/689135bf74b007ea88d6ee7e186544e4398619bb/src/main.rs#L29
-    let conn = SqliteConnectOptions::from_str(db_url)?
-        .create_if_missing(true)
-        .optimize_on_close(true, None);
-    let pool = SqlitePoolOptions::new().connect_lazy_with(conn);
-    Ok(pool)
-}
-
-type SqPool = Pool<Sqlite>;
-
-pub async fn get_similar_artists(
+pub async fn get_lastfm_similar_artists(
     artist: &str,
     pool: &SqPool,
 ) -> anyhow::Result<HashMap<String, f64>> {
@@ -116,28 +96,66 @@ pub async fn get_similar_artists(
 mod tests {
 
     use std::fs;
+    use std::path::Path;
+
+    use uuid::Uuid;
 
     use super::SqPool;
     use crate::get_artist_pair;
-    use crate::get_similar_artists;
+    use crate::get_lastfm_similar_artists;
     use crate::init_db;
 
-    async fn init_test_db() -> SqPool {
-        fs::remove_file("test.db").unwrap();
-        let pool = init_db("sqlite://test.db").unwrap();
+    pub struct TestPool {
+        pool: SqPool,
+        path: String,
+    }
+
+    /// custom `Drop` avoids clogging up your whatever dir when running lots of
+    /// tests
+    impl Drop for TestPool {
+        fn drop(&mut self) { fs::remove_file(&self.path).unwrap(); }
+    }
+
+    async fn init_test_db() -> TestPool {
+        let id = Uuid::new_v4();
+        // let path = format!("/tmp/test-{id}.db");
+        let path = format!("test-{id}.db");
+        if Path::new(&path).exists() {
+            fs::remove_file(&path).unwrap();
+        }
+        let pool = init_db(&format!("sqlite://{path}")).unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
-        pool
+        TestPool { pool, path }
     }
 
     #[tokio::test]
     async fn lastfm_similar() {
-        let pool = init_test_db().await;
+        let t = init_test_db().await;
         assert_eq!(
-            get_similar_artists("loona", &pool).await.unwrap().len(),
+            get_lastfm_similar_artists("loona", &t.pool)
+                .await
+                .unwrap()
+                .len(),
             100
         );
 
-        let stored = get_artist_pair("loona", &pool).await.unwrap();
+        let stored = get_artist_pair("loona", &t.pool).await.unwrap();
+        assert_eq!(stored.len(), 100);
+        assert_eq!(stored.iter().filter(|e| e.sim >= 70).count(), 3);
+    }
+
+    #[tokio::test]
+    async fn special_chars() {
+        let t = init_test_db().await;
+        assert_eq!(
+            get_lastfm_similar_artists("loona 1/3", &t.pool)
+                .await
+                .unwrap()
+                .len(),
+            100
+        );
+
+        let stored = get_artist_pair("loona 1/3", &t.pool).await.unwrap();
         assert_eq!(stored.len(), 100);
         assert_eq!(stored.iter().filter(|e| e.sim >= 70).count(), 3);
     }

@@ -23,6 +23,7 @@ where
     actix_web::error::ErrorInternalServerError(e)
 }
 
+/// `GET /artist/{artist}`
 pub async fn get_artist(req: HttpRequest) -> Result<HttpResponse, actix_web::Error> {
     let artist = req
         .match_info()
@@ -36,7 +37,7 @@ pub async fn get_artist(req: HttpRequest) -> Result<HttpResponse, actix_web::Err
     let html = ArtistTree::new(artist).as_html().await.map_err(error_500)?;
 
     Ok(HttpResponse::Ok()
-        // .content_type(ContentType::html())
+        .content_type(ContentType::html())
         .body(html))
 }
 
@@ -57,9 +58,11 @@ pub struct ArtistTree {
     // edges: Vec<Edge>,
     nodes: HashMap<String, NodeIndex>,
 
+    #[allow(dead_code)]
     /// Default: 0.7
     threshold: f64,
 
+    #[allow(dead_code)]
     /// Default: 2
     depth: u8,
 }
@@ -81,21 +84,21 @@ impl ArtistTree {
         }
     }
 
-    fn with_threshold(
-        mut self,
-        new: f64,
-    ) -> Self {
-        self.threshold = new;
-        self
-    }
-
-    fn with_depth(
-        mut self,
-        new: u8,
-    ) -> Self {
-        self.depth = new;
-        self
-    }
+    // fn with_threshold(
+    //     mut self,
+    //     new: f64,
+    // ) -> Self {
+    //     self.threshold = new;
+    //     self
+    // }
+    //
+    // fn with_depth(
+    //     mut self,
+    //     new: u8,
+    // ) -> Self {
+    //     self.depth = new;
+    //     self
+    // }
 
     /// HashMap and Graph are constructed in parallel
     async fn build(&mut self) -> Graph<String, String> {

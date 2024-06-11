@@ -14,11 +14,11 @@ use std::env;
 
 use lazy_static::lazy_static;
 
-mod artist;
 mod db;
+mod lastfm;
 mod tree;
-pub use artist::*;
 pub use db::*;
+pub use lastfm::*;
 pub use tree::*;
 
 lazy_static! {

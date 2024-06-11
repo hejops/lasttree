@@ -1,11 +1,25 @@
-// TODO: represent in sqlite --
-// 1 table for artist/id,
-// 1 table for (id,id)/sim
+use std::str::FromStr;
 
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Pool;
 use sqlx::Sqlite;
 
 use crate::Edge;
+
+pub type SqPool = Pool<Sqlite>;
+
+pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
+    // to enable `sqlx migrate run`, ensure sqlx-cli is installed with the
+    // appropriate feature: cargo install sqlx-cli -F rustls,postgres,sqlite[,...]
+
+    // https://github.com/danbruder/twhn_api/blob/689135bf74b007ea88d6ee7e186544e4398619bb/src/main.rs#L29
+    let conn = SqliteConnectOptions::from_str(db_url)?
+        .create_if_missing(true)
+        .optimize_on_close(true, None);
+    let pool = SqlitePoolOptions::new().connect_lazy_with(conn);
+    Ok(pool)
+}
 
 pub async fn get_artist_from_db(
     name: &str,
