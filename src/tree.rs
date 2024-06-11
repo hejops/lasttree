@@ -46,7 +46,7 @@ pub async fn get_artist(req: HttpRequest) -> Result<HttpResponse, actix_web::Err
 pub struct Edge {
     pub parent: String,
     pub child: String,
-    pub sim: i64,
+    pub similarity: i64,
 }
 
 #[derive(Debug)]

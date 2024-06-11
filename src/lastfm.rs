@@ -8,6 +8,9 @@ use serde::Deserializer;
 use serde_json::Value;
 
 use super::LASTFM_KEY;
+use crate::get_artist_from_db;
+use crate::get_artist_pairs;
+use crate::store_artist;
 use crate::store_artist_pair;
 use crate::SqPool;
 
@@ -16,7 +19,8 @@ use crate::SqPool;
 struct Artist {
     pub name: String,
 
-    /// Preserved as `String`, in order to be able to implement `Eq`
+    /// Deserialized as `f64`, but stored in db as `i64` (since sqlite has no
+    /// `NUMERIC` type)
     #[serde(rename = "match", deserialize_with = "str_to_f64")]
     pub similarity: f64,
     // pub url: String,
@@ -46,16 +50,17 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
 pub async fn get_lastfm_similar_artists(
     artist: &str,
     pool: &SqPool,
-) -> anyhow::Result<HashMap<String, f64>> {
-    // let db_url =
-    // env::var("DATABASE_URL").unwrap_or("sqlite://lasttree.db".to_owned());
-    // let pool = init_db(&db_url)?;
+) -> anyhow::Result<HashMap<String, i64>> {
+    let mut map = HashMap::new();
 
-    // // TODO: first check db; if found, build the hashmap without fetching
-    // let found = get_artist_from_db(artist, pool).await?;
-    // if found.is_some() {
-    //     panic!()
-    // }
+    // first check db; if found, build the hashmap without fetching
+    if let Some(canon) = get_artist_from_db(artist, pool).await? {
+        for pair in get_artist_pairs(&canon, pool).await? {
+            map.insert(pair.child, pair.similarity);
+        }
+        println!("using cached result");
+        return Ok(map);
+    }
 
     let url = format!(
             "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json",
@@ -78,14 +83,12 @@ pub async fn get_lastfm_similar_artists(
             .context("no artist field")?
             .clone(),
     )?;
-    // store_artist(&canon_name, &pool).await?;
-
-    let mut map = HashMap::new();
+    store_artist(&canon_name, pool).await?;
 
     for sim in artist.similar_artists {
         // store_artist(&sim.name, &pool).await?;
         store_artist_pair(&canon_name, &sim.name, sim.similarity, pool).await?;
-        map.insert(sim.name, sim.similarity);
+        map.insert(sim.name, sim.similarity as i64);
     }
     // panic!();
 
@@ -101,7 +104,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::SqPool;
-    use crate::get_artist_pair;
+    use crate::get_artist_pairs;
     use crate::get_lastfm_similar_artists;
     use crate::init_db;
 
@@ -129,7 +132,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn lastfm_similar() {
+    async fn standard() {
         let t = init_test_db().await;
         assert_eq!(
             get_lastfm_similar_artists("loona", &t.pool)
@@ -139,9 +142,9 @@ mod tests {
             100
         );
 
-        let stored = get_artist_pair("loona", &t.pool).await.unwrap();
+        let stored = get_artist_pairs("loona", &t.pool).await.unwrap();
         assert_eq!(stored.len(), 100);
-        assert_eq!(stored.iter().filter(|e| e.sim >= 70).count(), 3);
+        assert_eq!(stored.iter().filter(|e| e.similarity >= 70).count(), 3);
     }
 
     #[tokio::test]
@@ -155,8 +158,16 @@ mod tests {
             100
         );
 
-        let stored = get_artist_pair("loona 1/3", &t.pool).await.unwrap();
+        let stored = get_artist_pairs("loona 1/3", &t.pool).await.unwrap();
         assert_eq!(stored.len(), 100);
-        assert_eq!(stored.iter().filter(|e| e.sim >= 70).count(), 3);
+        assert_eq!(stored.iter().filter(|e| e.similarity >= 70).count(), 3);
+    }
+
+    #[tokio::test]
+    async fn cached_result() {
+        let t = init_test_db().await;
+        // TODO: test http requests -- Mock?
+        get_lastfm_similar_artists("loona", &t.pool).await.unwrap();
+        get_lastfm_similar_artists("loona", &t.pool).await.unwrap();
     }
 }

@@ -21,6 +21,7 @@ pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
     Ok(pool)
 }
 
+/// Query `artists` table (which is much faster than `artist_pairs`)
 pub async fn get_artist_from_db(
     name: &str,
     pool: &Pool<Sqlite>,
@@ -57,7 +58,7 @@ pub async fn store_artist(
     Ok(())
 }
 
-pub async fn get_artist_pair(
+pub async fn get_artist_pairs(
     name: &str,
     pool: &Pool<Sqlite>,
 ) -> anyhow::Result<Vec<Edge>> {
@@ -80,7 +81,7 @@ pub async fn get_artist_pair(
     .map(|r| Edge {
         parent: r.parent.clone(),
         child: r.child.clone(),
-        sim: r.similarity,
+        similarity: r.similarity,
     })
     .collect();
 
@@ -100,7 +101,7 @@ pub async fn store_artist_pair(
     let sim_int = (similarity * 100.0) as u32;
     sqlx::query!(
         r#"
-            INSERT OR IGNORE INTO artist_pairs 
+            INSERT OR IGNORE INTO artist_pairs
             (
                 parent, parent_lower,
                 child, child_lower,
