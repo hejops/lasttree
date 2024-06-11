@@ -15,10 +15,10 @@ use std::env;
 use lazy_static::lazy_static;
 
 mod artist;
-mod cli;
+mod db;
 mod tree;
 pub use artist::*;
-pub use cli::*;
+pub use db::*;
 pub use tree::*;
 
 lazy_static! {

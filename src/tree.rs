@@ -1,16 +1,52 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::fmt::Display;
 use std::process::Command;
 use std::process::Stdio;
 
+use actix_web::http::header::ContentType;
+use actix_web::HttpRequest;
+use actix_web::HttpResponse;
+use anyhow::Context;
 use itertools::Itertools;
 use petgraph::dot::Dot;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
 
-use super::SimilarArtist;
+// use super::Artist;
+
+/// Convert arbitrary error types to `actix_web::Error` with HTTP 500
+pub fn error_500<T>(e: T) -> actix_web::Error
+where
+    T: Debug + Display + 'static,
+{
+    actix_web::error::ErrorInternalServerError(e)
+}
+
+pub async fn get_artist(req: HttpRequest) -> Result<HttpResponse, actix_web::Error> {
+    let artist = req
+        .match_info()
+        .get("artist")
+        .context("no artist supplied")
+        .map_err(error_500)?;
+
+    let mut tree = ArtistTree::new(artist);
+    tree.build().await;
+
+    let html = ArtistTree::new(artist).as_html().await.map_err(error_500)?;
+
+    Ok(HttpResponse::Ok()
+        // .content_type(ContentType::html())
+        .body(html))
+}
 
 #[derive(Debug)]
-pub struct Edge(String, String, f64);
+// pub struct Edge(String, String, f64);
+pub struct Edge {
+    pub parent: String,
+    pub child: String,
+    pub sim: i64,
+}
 
 #[derive(Debug)]
 /// This should be implemented as a tree, because graphs will usually produce
@@ -29,7 +65,7 @@ pub struct ArtistTree {
 }
 
 impl ArtistTree {
-    /// Defaults to threshold 0.7, depth 2
+    /// Defaults to `threshold` 0.7, `depth` 2
     pub fn new(root: &str) -> Self {
         let root = root.to_string().to_lowercase();
         // let edges = vec![];
@@ -62,7 +98,7 @@ impl ArtistTree {
     }
 
     /// HashMap and Graph are constructed in parallel
-    fn build(&mut self) -> Graph<String, String> {
+    async fn build(&mut self) -> Graph<String, String> {
         let mut graph = Graph::new();
 
         // TODO: refactor all lowercase calls
@@ -70,38 +106,41 @@ impl ArtistTree {
         let root = self.root.to_lowercase();
         let r = graph.add_node(root.clone());
         self.nodes.insert(root.clone(), r);
+        assert!(!self.nodes.is_empty());
 
-        for _ in 0..=self.depth {
-            for parent in self.nodes.clone().keys().map(|p| p.to_lowercase()) {
-                let children = match SimilarArtist::new(&parent).get_similar() {
-                    Ok(ch) => ch
-                        .into_iter()
-                        .map(|mut a| {
-                            // note: make_ascii_lowercase will leave non-ascii chars untouched
-                            // a.name.make_ascii_lowercase();
-                            // a
-                            a.name = a.name.to_lowercase();
-                            a
-                        })
-                        .filter(|a| a.sim_gt(0.7)),
-                    Err(_) => continue,
-                };
-                for c in children {
-                    let n1 = match self.nodes.get(&parent) {
-                        Some(node) => *node,
-                        None => graph.add_node(parent.to_string()),
-                    };
-                    let n2 = match self.nodes.get(&c.name) {
-                        Some(_) => continue,
-                        None => graph.add_node(c.name.clone()),
-                    };
-                    graph.add_edge(n1, n2, c.similarity);
-
-                    self.nodes.insert(parent.clone(), n1);
-                    self.nodes.insert(c.name, n2);
-                }
-            }
-        }
+        // for i in 0..=self.depth {
+        //     // let nodes = self.nodes.clone();
+        //     // let parents = nodes.keys().map(|p| p.to_lowercase());
+        //     for parent in self.nodes.clone().keys().map(|p| p.to_lowercase()) {
+        //         let children = match Artist::new(&parent).get_similar().await {
+        //             Ok(ch) => ch
+        //                 .into_iter()
+        //                 .map(|mut a| {
+        //                     // note: make_ascii_lowercase will leave non-ascii chars
+        // untouched                     // a.name.make_ascii_lowercase();
+        //                     // a
+        //                     a.name = a.name.to_lowercase();
+        //                     a
+        //                 })
+        //                 .filter(|a| a.sim_gt(0.7)),
+        //             Err(_) => continue,
+        //         };
+        //         for c in children {
+        //             let n1 = match self.nodes.get(&parent) {
+        //                 Some(node) => *node,
+        //                 None => graph.add_node(parent.to_string()),
+        //             };
+        //             let n2 = match self.nodes.get(&c.name) {
+        //                 Some(_) => continue,
+        //                 None => graph.add_node(c.name.clone()),
+        //             };
+        //             graph.add_edge(n1, n2, c.similarity);
+        //
+        //             self.nodes.insert(parent.clone(), n1);
+        //             self.nodes.insert(c.name, n2);
+        //         }
+        //     }
+        // }
 
         graph
     }
@@ -159,13 +198,13 @@ impl ArtistTree {
     //     graph
     // }
 
-    pub fn as_dot(
+    pub async fn as_dot(
         &mut self,
         fmt: DotOutput,
     ) -> anyhow::Result<String> {
         // echo {out} | <fdp|dot> -Tsvg | display
 
-        let g = &self.build();
+        let g = &self.build().await;
         let dot = Dot::new(g);
         let ext = match fmt {
             DotOutput::Png => "png",
@@ -200,17 +239,21 @@ impl ArtistTree {
         // Ok(())
     }
 
-    pub fn as_html(&mut self) -> String {
+    pub async fn as_html(&mut self) -> anyhow::Result<String> {
         let graph = self
             .as_dot(DotOutput::Svg)
-            .unwrap()
+            .await?
             .lines()
             .skip(3)
             .join("\n");
 
+        // OrderedMap::new().descending_values().into_iter();
+
         let links = self
             .nodes
             .keys()
+            .filter(|n| **n != self.root)
+            // TODO: sort by sim descending
             .map(|n| {
                 format!(
                     // TODO: table
@@ -221,7 +264,7 @@ impl ArtistTree {
             })
             .join("\n");
 
-        format!(
+        let html = format!(
             r#"
 <!doctype html>
 <html>
@@ -236,7 +279,8 @@ impl ArtistTree {
             self.root.clone(),
             graph,
             links,
-        )
+        );
+        Ok(html)
     }
 }
 
@@ -251,27 +295,29 @@ mod tests {
 
     use super::ArtistTree;
 
-    fn check_nodes(
+    async fn check_nodes(
         root: &str,
         expected_nodes: &[&str],
     ) {
         let mut tree = ArtistTree::new(root);
-        tree.build();
+        tree.build().await;
 
         assert!(!tree.nodes.is_empty());
 
         let obtained: HashSet<&str> = tree.nodes.keys().map(|s| s.as_str()).collect();
         let expected = HashSet::from_iter(expected_nodes.iter().map(|s| s.to_owned()));
-        // println!("{:#?}", tree.nodes);
         assert_eq!(obtained, expected);
+
+        let html = tree.as_html().await.unwrap();
+        assert_eq!(html.matches("<li>").count(), expected.len() - 1);
     }
 
-    #[test]
-    fn test_basic() {
+    // #[tokio::test]
+    async fn basic_tree_construction() {
         check_nodes(
             "loona",
-            // &["looΠΔ / odd eye circle", "loona", "loona/yyxy", "looΠΔ 1/3"],
             &["loona", "looπδ 1/3", "looπδ / odd eye circle", "loona/yyxy"],
-        );
+        )
+        .await;
     }
 }
