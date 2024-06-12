@@ -1,10 +1,12 @@
 use itertools::Itertools;
 use maud::html;
+use maud::Markup;
 use maud::PreEscaped;
 
 use crate::ArtistTree;
 use crate::DotOutput;
 
+// TODO: return Markup
 pub fn get_lastfm_url(name: &str) -> String {
     // https://github.com/isgasho/lettre/blob/a0980d017b1257018446228162a8d17bff17798f/examples/maud_html.rs#L24
     html! {
@@ -28,7 +30,7 @@ pub fn list_item(s: String) -> String {
 }
 
 impl ArtistTree {
-    pub async fn as_html(&self) -> anyhow::Result<String> {
+    pub async fn as_html(&self) -> anyhow::Result<Markup> {
         let svg = self
             .as_dot(DotOutput::Svg)
             .await?
@@ -51,10 +53,12 @@ impl ArtistTree {
         let html = html! {
             html {
                 body { h1 { (self.root.clone()) } (PreEscaped(svg)) }
-                table { (PreEscaped(links)) }
+                table {
+                    th { "foo" }
+                    (PreEscaped(links))
+                }
             }
-        }
-        .into_string();
+        };
 
         Ok(html)
     }

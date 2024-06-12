@@ -3,10 +3,6 @@ use std::fmt::Display;
 use std::process::Command;
 use std::process::Stdio;
 
-use actix_web::http::header::ContentType;
-use actix_web::web;
-use actix_web::HttpRequest;
-use actix_web::HttpResponse;
 use anyhow::Context;
 use indexmap::IndexMap;
 use petgraph::dot::Dot;
@@ -23,40 +19,6 @@ where
     T: Debug + Display + 'static,
 {
     actix_web::error::ErrorInternalServerError(e)
-}
-
-pub async fn home() -> Result<HttpResponse, actix_web::Error> {
-    let html = "hello world";
-    Ok(HttpResponse::Ok()
-        .content_type(ContentType::html())
-        .body(html))
-}
-
-/// `GET /artists`
-pub async fn search_artist() -> Result<HttpResponse, actix_web::Error> {
-    let html = "search artist:";
-    Ok(HttpResponse::Ok()
-        .content_type(ContentType::html())
-        .body(html))
-}
-
-/// `GET /artists/{artist}`
-pub async fn get_artist(
-    req: HttpRequest,
-    pool: web::Data<SqPool>,
-) -> Result<HttpResponse, actix_web::Error> {
-    let artist = req
-        .match_info()
-        .get("artist")
-        .context("no artist supplied")
-        .map_err(error_500)?;
-
-    let tree = ArtistTree::new(artist, &pool).await;
-    let html = tree.as_html().await.map_err(error_500)?;
-
-    Ok(HttpResponse::Ok()
-        .content_type(ContentType::html())
-        .body(html))
 }
 
 #[derive(Debug)]
@@ -229,7 +191,7 @@ pub enum DotOutput {
 mod tests {
 
     use super::ArtistTree;
-    use crate::init_test_db;
+    use crate::tests::init_test_db;
 
     // TODO: initial graph layout often different from when cached data is
     // available. this suggests that we should cache everything first before
@@ -251,11 +213,7 @@ mod tests {
 
         let html = tree.as_html().await.unwrap();
         assert_eq!(
-            html.matches(
-                // "<li>"
-                "<tr><td>"
-            )
-            .count(),
+            html.into_string().matches("<tr><td>").count(),
             expected_nodes.len() - 1
         );
     }

@@ -8,14 +8,6 @@ use sqlx::Sqlite;
 
 pub type SqPool = Pool<Sqlite>;
 
-#[derive(Debug)]
-// pub struct Edge(String, String, f64);
-pub struct ArtistPair {
-    pub parent: String,
-    pub child: String,
-    pub similarity: i64,
-}
-
 pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
     // to enable `sqlx migrate run`, ensure sqlx-cli is installed with the
     // appropriate feature: cargo install sqlx-cli -F rustls,postgres,sqlite[,...]
@@ -65,11 +57,17 @@ pub async fn store_artist(
     Ok(())
 }
 
+#[derive(Debug)]
+pub struct ArtistPair {
+    pub parent: String,
+    pub child: String,
+    pub similarity: i64,
+}
+
 pub async fn get_artist_pairs(
     name: &str,
     pool: &Pool<Sqlite>,
 ) -> anyhow::Result<Vec<ArtistPair>> {
-    // let lower = name.to_lowercase();
     let name = get_canonical_name(name, pool).await?;
 
     let mut pairs: Vec<ArtistPair> = sqlx::query!(
@@ -124,8 +122,6 @@ pub async fn store_artist_pair(
     similarity: f64,
     pool: &Pool<Sqlite>,
 ) -> anyhow::Result<()> {
-    // let lower1 = name1.to_lowercase();
-    // let lower2 = name2.to_lowercase();
     let sim_int = (similarity * 100.0) as u32;
     sqlx::query!(
         r#"
@@ -138,9 +134,7 @@ pub async fn store_artist_pair(
             VALUES ($1, $2, $3)
         "#,
         name1,
-        // lower1,
         name2,
-        // lower2,
         sim_int
     )
     .execute(pool)

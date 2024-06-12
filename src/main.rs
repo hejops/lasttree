@@ -3,10 +3,8 @@ use std::env;
 use actix_web::web;
 use actix_web::App;
 use actix_web::HttpServer;
-use lasttree::get_artist;
-use lasttree::home;
 use lasttree::init_db;
-use lasttree::search_artist;
+use lasttree::routes;
 
 #[tokio::main] // requires tokio features: macros, rt-multi-thread
 async fn main() -> anyhow::Result<()> {
@@ -20,9 +18,18 @@ async fn main() -> anyhow::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .route("/", web::get().to(home))
-            .route("/artists", web::get().to(search_artist))
-            .route("/artists/{artist}", web::get().to(get_artist))
+            // .route("/", web::get().to(home))
+            // .route("/artists", web::get().to(search_artist))
+            // .route("/artists/{artist}", web::get().to(get_artist))
+            // i prefer
+            //      .service(foo) + #[get("/foo")] fn foo
+            // over
+            //      .route("/foo", web::get().to(foo))
+            // because it keeps `App` clean, and the route is more closely coupled to the function
+            // https://actix.rs/docs/url-dispatch/#scoping-routes
+            .service(routes::home)
+            .service(routes::search_artist)
+            .service(routes::get_artist)
             .app_data(pool.clone())
     })
     .bind(("127.0.0.1", 3838))?
