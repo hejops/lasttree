@@ -28,7 +28,22 @@ where
     actix_web::error::ErrorInternalServerError(e)
 }
 
-/// `GET /artist/{artist}`
+pub async fn home() -> Result<HttpResponse, actix_web::Error> {
+    let html = "hello world";
+    Ok(HttpResponse::Ok()
+        .content_type(ContentType::html())
+        .body(html))
+}
+
+/// `GET /artists`
+pub async fn search_artist() -> Result<HttpResponse, actix_web::Error> {
+    let html = "search artist:";
+    Ok(HttpResponse::Ok()
+        .content_type(ContentType::html())
+        .body(html))
+}
+
+/// `GET /artists/{artist}`
 pub async fn get_artist(
     req: HttpRequest,
     pool: web::Data<SqPool>,

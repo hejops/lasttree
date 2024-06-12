@@ -29,8 +29,11 @@ struct Artist {
 /// Top-level
 #[derive(Deserialize, Debug, Clone)]
 struct LastfmArtist {
+    /// Only used to extract the canonical name (with the correct
+    /// capitalisation)
     #[serde(rename = "@attr")]
     attr: Value,
+
     #[serde(rename = "artist")]
     similar_artists: Vec<Artist>,
 }
@@ -47,23 +50,34 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
     })
 }
 
-/// Will fetch from db if `artist` has been cached.
+/// `canon` must be found in `artists` table. This allows the hashmap to be
+/// built without making any network requests.
+pub async fn get_cached_similar_artists(
+    canon: &str,
+    pool: &SqPool,
+) -> anyhow::Result<HashMap<String, i64>> {
+    let mut map = HashMap::new();
+    for pair in get_artist_pairs(canon, pool).await? {
+        map.insert(pair.child, pair.similarity);
+    }
+    println!("using cached result");
+    Ok(map)
+}
+
+/// Fetches from db if `artist` has been cached in the `artists` table.
+/// Otherwise, the network request is processed and cached so it can be skipped
+/// the next time.
 ///
-/// Note: `artist` will **not** be included in the map's keys; the maximum
-/// similarity is 100.
+/// Notes:
+/// - `artist` will **not** be included in the map's keys
+/// - the maximum similarity is 100
 pub async fn get_lastfm_similar_artists(
     artist: &str,
     pool: &SqPool,
 ) -> anyhow::Result<HashMap<String, i64>> {
-    let mut map = HashMap::new();
-
-    // first check db; if found, build the hashmap without fetching
     if let Some(canon) = get_artist_from_db(artist, pool).await? {
-        for pair in get_artist_pairs(&canon, pool).await? {
-            map.insert(pair.child, pair.similarity);
-        }
-        println!("using cached result");
-        return Ok(map);
+        let cached = get_cached_similar_artists(&canon, pool).await?;
+        return Ok(cached);
     }
 
     let url = format!(
@@ -84,6 +98,7 @@ pub async fn get_lastfm_similar_artists(
         serde_json::from_value(root.attr.get("artist").context("no artist field")?.clone())?;
     store_artist(&canon_name, pool).await?;
 
+    let mut map = HashMap::new();
     for sim in root.similar_artists {
         // store_artist(&sim.name, &pool).await?;
         store_artist_pair(&canon_name, &sim.name, sim.similarity, pool).await?;

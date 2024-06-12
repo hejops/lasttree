@@ -71,7 +71,10 @@ pub async fn get_artist_pairs(
                 child,
                 similarity
             FROM artist_pairs
-            WHERE $1 IN (parent_lower, child_lower); -- https://stackoverflow.com/a/13916417
+            WHERE $1 
+            -- https://stackoverflow.com/a/13916417
+            -- IN (parent_lower, child_lower); 
+            = parent_lower;
         "#,
         lower,
     )
