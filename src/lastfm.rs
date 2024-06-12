@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::f64;
 
 use anyhow::Context;
@@ -7,13 +6,27 @@ use serde::de;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde_json::Value;
+use sqlx::encode;
+use urlencoding::encode;
 
 use super::LASTFM_KEY;
-use crate::get_artist_from_db;
-use crate::get_artist_pairs;
+use crate::get_cached_similar_artists;
+use crate::get_canonical_name;
 use crate::store_artist;
 use crate::store_artist_pair;
 use crate::SqPool;
+
+/// Top-level json object returned by last.fm
+#[derive(Deserialize, Debug, Clone)]
+struct LastfmArtist {
+    /// Only used to extract the canonical name (with the correct
+    /// capitalisation)
+    #[serde(rename = "@attr")]
+    attr: Value,
+
+    #[serde(rename = "artist")]
+    similar_artists: Vec<Artist>,
+}
 
 /// A convenience struct used when iterating over a json array
 #[derive(Deserialize, Debug, Clone)]
@@ -24,9 +37,6 @@ struct Artist {
     /// `NUMERIC` type)
     #[serde(rename = "match", deserialize_with = "str_to_f64")]
     pub similarity: f64,
-
-    /// Used for `ArtistTree::as_html`
-    pub url: String,
 }
 
 impl PartialEq for Artist {
@@ -36,18 +46,6 @@ impl PartialEq for Artist {
     ) -> bool {
         self.name == other.name
     }
-}
-
-/// Top-level
-#[derive(Deserialize, Debug, Clone)]
-struct LastfmArtist {
-    /// Only used to extract the canonical name (with the correct
-    /// capitalisation)
-    #[serde(rename = "@attr")]
-    attr: Value,
-
-    #[serde(rename = "artist")]
-    similar_artists: Vec<Artist>,
 }
 
 // https://stackoverflow.com/a/75684771
@@ -62,18 +60,13 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
     })
 }
 
-/// `canon` must be found in `artists` table. This allows the hashmap to be
-/// built without making any network requests.
-pub async fn get_cached_similar_artists(
-    canon: &str,
-    pool: &SqPool,
-) -> anyhow::Result<IndexMap<String, i64>> {
-    let mut map = IndexMap::new();
-    for pair in get_artist_pairs(canon, pool).await? {
-        map.insert(pair.child, pair.similarity);
-    }
-    println!("using cached result");
-    Ok(map)
+pub fn get_lastfm_url(name: &str) -> String {
+    format!(
+        // TODO: <tr>
+        r#"<a href="https://last.fm/music/{}">{}</a>"#,
+        encode(name),
+        name
+    )
 }
 
 /// Fetches from db if `artist` has been cached in the `artists` table.
@@ -88,16 +81,16 @@ pub async fn get_similar_artists(
     artist: &str,
     pool: &SqPool,
 ) -> anyhow::Result<IndexMap<String, i64>> {
-    if let Some(canon) = get_artist_from_db(artist, pool).await? {
+    if let Some(canon) = get_canonical_name(artist, pool).await? {
         let cached = get_cached_similar_artists(&canon, pool).await?;
         return Ok(cached);
     }
 
     let url = format!(
             "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json",
-            artist,
+            encode(artist),
             *LASTFM_KEY
-        );
+    );
 
     // String -> Value -> struct
     let resp = reqwest::get(url).await?.text().await?;
@@ -162,6 +155,19 @@ mod tests {
         let stored = get_artist_pairs("loona 1/3", pool).await.unwrap();
         assert_eq!(stored.len(), 100);
         assert_eq!(stored.iter().filter(|e| e.similarity >= 70).count(), 3);
+    }
+
+    #[tokio::test]
+    async fn wide_chars() {
+        let pool = &init_test_db().await.pool;
+
+        let retrieved = get_similar_artists("sadwrist", pool).await.unwrap();
+        assert_eq!(retrieved.len(), 100);
+        assert_eq!(retrieved.values().max(), Some(&100));
+
+        let stored = get_artist_pairs("sadwrist", pool).await.unwrap();
+        assert_eq!(stored.len(), 100);
+        assert_eq!(stored.iter().filter(|e| e.similarity >= 70).count(), 4);
     }
 
     #[tokio::test]

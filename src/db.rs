@@ -1,13 +1,20 @@
 use std::str::FromStr;
 
+use indexmap::IndexMap;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Pool;
 use sqlx::Sqlite;
 
-use crate::Edge;
-
 pub type SqPool = Pool<Sqlite>;
+
+#[derive(Debug)]
+// pub struct Edge(String, String, f64);
+pub struct ArtistPair {
+    pub parent: String,
+    pub child: String,
+    pub similarity: i64,
+}
 
 pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
     // to enable `sqlx migrate run`, ensure sqlx-cli is installed with the
@@ -22,7 +29,7 @@ pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
 }
 
 /// Query `artists` table (which is much faster than `artist_pairs`)
-pub async fn get_artist_from_db(
+pub async fn get_canonical_name(
     name: &str,
     pool: &Pool<Sqlite>,
 ) -> anyhow::Result<Option<String>> {
@@ -61,10 +68,11 @@ pub async fn store_artist(
 pub async fn get_artist_pairs(
     name: &str,
     pool: &Pool<Sqlite>,
-) -> anyhow::Result<Vec<Edge>> {
-    let lower = name.to_lowercase();
+) -> anyhow::Result<Vec<ArtistPair>> {
+    // let lower = name.to_lowercase();
+    let name = get_canonical_name(name, pool).await?;
 
-    let mut pairs: Vec<Edge> = sqlx::query!(
+    let mut pairs: Vec<ArtistPair> = sqlx::query!(
         r#"
             SELECT
                 parent,
@@ -74,14 +82,15 @@ pub async fn get_artist_pairs(
             WHERE $1
             -- https://stackoverflow.com/a/13916417
             -- IN (parent_lower, child_lower);
-            = parent_lower;
+            -- = parent_lower;
+            = parent;
         "#,
-        lower,
+        name,
     )
     .fetch_all(pool)
     .await?
     .iter()
-    .map(|r| Edge {
+    .map(|r| ArtistPair {
         parent: r.parent.clone(),
         child: r.child.clone(),
         similarity: r.similarity,
@@ -93,6 +102,20 @@ pub async fn get_artist_pairs(
     Ok(pairs)
 }
 
+/// `canon` must be found in `artists` table. This allows the hashmap to be
+/// built without making any network requests.
+pub async fn get_cached_similar_artists(
+    name: &str,
+    pool: &SqPool,
+) -> anyhow::Result<IndexMap<String, i64>> {
+    let mut map = IndexMap::new();
+    for pair in get_artist_pairs(name, pool).await? {
+        map.insert(pair.child, pair.similarity);
+    }
+    // println!("using cached result");
+    Ok(map)
+}
+
 /// Because sqlite does not support the `NUMERIC` type, `similarity` is cast to
 /// integer before insertion into db.
 pub async fn store_artist_pair(
@@ -101,55 +124,27 @@ pub async fn store_artist_pair(
     similarity: f64,
     pool: &Pool<Sqlite>,
 ) -> anyhow::Result<()> {
-    let lower1 = name1.to_lowercase();
-    let lower2 = name2.to_lowercase();
+    // let lower1 = name1.to_lowercase();
+    // let lower2 = name2.to_lowercase();
     let sim_int = (similarity * 100.0) as u32;
     sqlx::query!(
         r#"
             INSERT OR IGNORE INTO artist_pairs
             (
-                parent, parent_lower,
-                child, child_lower,
+                parent, -- parent_lower,
+                child, -- child_lower,
                 similarity
             )
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3)
         "#,
         name1,
-        lower1,
+        // lower1,
         name2,
-        lower2,
+        // lower2,
         sim_int
     )
     .execute(pool)
     .await
     .unwrap();
     Ok(())
-}
-
-use std::fs;
-use std::path::Path;
-
-use uuid::Uuid;
-
-pub struct TestPool {
-    pub pool: SqPool,
-    pub path: String,
-}
-
-/// custom `Drop` avoids clogging up your whatever dir when running lots of
-/// tests
-impl Drop for TestPool {
-    fn drop(&mut self) { fs::remove_file(&self.path).unwrap(); }
-}
-
-pub async fn init_test_db() -> TestPool {
-    let id = Uuid::new_v4();
-    // let path = format!("/tmp/test-{id}.db");
-    let path = format!("test-{id}.db");
-    if Path::new(&path).exists() {
-        fs::remove_file(&path).unwrap();
-    }
-    let pool = init_db(&format!("sqlite://{path}")).unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    TestPool { pool, path }
 }

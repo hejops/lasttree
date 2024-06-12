@@ -16,9 +16,11 @@ use lazy_static::lazy_static;
 
 mod db;
 mod lastfm;
+mod tests;
 mod tree;
 pub use db::*;
 pub use lastfm::*;
+pub use tests::*;
 pub use tree::*;
 
 lazy_static! {

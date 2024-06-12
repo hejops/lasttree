@@ -13,8 +13,10 @@ use itertools::Itertools;
 use petgraph::dot::Dot;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
+use urlencoding::encode;
 
-use crate::get_artist_from_db;
+use crate::get_canonical_name;
+use crate::get_lastfm_url;
 use crate::get_similar_artists;
 use crate::SqPool;
 
@@ -61,14 +63,6 @@ pub async fn get_artist(
 }
 
 #[derive(Debug)]
-// pub struct Edge(String, String, f64);
-pub struct Edge {
-    pub parent: String,
-    pub child: String,
-    pub similarity: i64,
-}
-
-#[derive(Debug)]
 /// raw json -> IndexMap (+ db rows) -> Graph -> Dot -> html
 ///
 /// This should be implemented as a tree, because graphs will usually produce
@@ -97,21 +91,19 @@ impl ArtistTree {
         pool: &SqPool,
     ) -> Self {
         let root = root.to_string();
-        // let edges = vec![];
         let nodes = IndexMap::new();
         let threshold = 0.7;
         let depth = 2;
 
         let mut tree = Self {
             root,
-            // edges,
             nodes,
             threshold,
             depth,
             graph: Graph::new(),
         };
 
-        tree.build_graph(pool).await;
+        tree.build_graph(pool).await.unwrap();
         tree
     }
 
@@ -136,14 +128,14 @@ impl ArtistTree {
     async fn build_graph(
         &mut self,
         pool: &SqPool,
-    ) {
+    ) -> anyhow::Result<()> {
         for i in 0..=self.depth {
             let parents = match i {
                 0 => {
                     // we literally only do this in order to store the canonical name in the db and
                     // get it back; the map returned by the function doesn't actually contain it!
-                    get_similar_artists(&self.root, pool).await.unwrap();
-                    let root = get_artist_from_db(&self.root, pool).await.unwrap().unwrap();
+                    get_similar_artists(&self.root, pool).await?;
+                    let root = get_canonical_name(&self.root, pool).await?.context("")?;
                     self.root = root.clone(); // override with the canonical
                     println!("{:#?}", self);
                     [root].to_vec()
@@ -152,7 +144,7 @@ impl ArtistTree {
             };
 
             for parent in parents {
-                let map = get_similar_artists(&parent, pool).await.unwrap();
+                let map = get_similar_artists(&parent, pool).await?;
 
                 println!("{}", parent);
                 for (k, v) in map.iter().take(5) {
@@ -160,6 +152,9 @@ impl ArtistTree {
                 }
 
                 for (c, sim) in map.iter().filter(|x| *x.1 >= 70) {
+                    // if c.is_empty() {
+                    //     continue;
+                    // }
                     let n1 = match self.nodes.get(&parent) {
                         Some(node) => *node,
                         None => self.graph.add_node(parent.clone()),
@@ -172,7 +167,7 @@ impl ArtistTree {
 
                     self.nodes.insert(parent.clone(), n1);
                     self.nodes.insert(c.to_string(), n2);
-                    println!("new node: {c} {n2:?}");
+                    // println!("new node: {c} {n2:?}");
                 }
                 // println!("{:?}", self.nodes);
             }
@@ -183,6 +178,7 @@ impl ArtistTree {
         }
 
         // graph
+        Ok(())
     }
 
     pub async fn as_dot(
@@ -242,12 +238,12 @@ impl ArtistTree {
             .keys()
             .filter(|n| **n != self.root)
             .sorted() // does not affect graph
-            // TODO: sort hashmap by value (sim) descending?
+            // .map(|x| format!("<li>{}</li>", get_lastfm_url(x)))
+            // .map(|x| format!("<tr>{}</tr>", get_lastfm_url(x)))
             .map(|n| {
                 format!(
-                    // TODO: table
                     r#"<li><a href="https://last.fm/music/{}">{}</a></li>"#,
-                    n.replace(' ', "+"),
+                    encode(n),
                     n
                 )
             })
@@ -278,10 +274,13 @@ pub enum DotOutput {
 
 #[cfg(test)]
 mod tests {
-    // use std::collections::HashSet;
 
     use super::ArtistTree;
     use crate::init_test_db;
+
+    // TODO: initial graph layout often different from when cached data is
+    // available. this suggests that we should cache everything first before
+    // constructing graph (or something to that effect)
 
     async fn check_nodes(
         root: &str,
