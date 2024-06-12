@@ -6,7 +6,6 @@ use serde::de;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde_json::Value;
-use sqlx::encode;
 use urlencoding::encode;
 
 use super::LASTFM_KEY;
@@ -58,15 +57,6 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
             .ok_or_else(|| de::Error::custom("Invalid number"))?,
         _ => return Err(de::Error::custom("wrong type")),
     })
-}
-
-pub fn get_lastfm_url(name: &str) -> String {
-    format!(
-        // TODO: <tr>
-        r#"<a href="https://last.fm/music/{}">{}</a>"#,
-        encode(name),
-        name
-    )
 }
 
 /// Fetches from db if `artist` has been cached in the `artists` table.
@@ -128,8 +118,10 @@ pub async fn get_similar_artists(
 mod tests {
 
     use crate::get_artist_pairs;
+    use crate::get_lastfm_url;
     use crate::get_similar_artists;
     use crate::init_test_db;
+    use crate::table_row;
 
     #[tokio::test]
     async fn standard() {
@@ -176,5 +168,17 @@ mod tests {
         // TODO: test that only 1 http request made -- Mock?
         get_similar_artists("loona", pool).await.unwrap();
         get_similar_artists("loona", pool).await.unwrap();
+    }
+
+    #[test]
+    fn html() {
+        let x = "loona";
+        let x = get_lastfm_url(x);
+        assert_eq!(x, r#"<a href="https://last.fm/music/loona">loona</a>"#);
+        let x = table_row(x);
+        assert_eq!(
+            x,
+            r#"<tr><td><a href="https://last.fm/music/loona">loona</a></td></tr>"#
+        );
     }
 }

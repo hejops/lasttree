@@ -15,10 +15,12 @@ use std::env;
 use lazy_static::lazy_static;
 
 mod db;
+mod html;
 mod lastfm;
 mod tests;
 mod tree;
 pub use db::*;
+pub use html::*;
 pub use lastfm::*;
 pub use tests::*;
 pub use tree::*;

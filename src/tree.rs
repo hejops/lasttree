@@ -9,14 +9,11 @@ use actix_web::HttpRequest;
 use actix_web::HttpResponse;
 use anyhow::Context;
 use indexmap::IndexMap;
-use itertools::Itertools;
 use petgraph::dot::Dot;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
-use urlencoding::encode;
 
 use crate::get_canonical_name;
-use crate::get_lastfm_url;
 use crate::get_similar_artists;
 use crate::SqPool;
 
@@ -68,10 +65,10 @@ pub async fn get_artist(
 /// This should be implemented as a tree, because graphs will usually produce
 /// many uninteresting cycles.
 pub struct ArtistTree {
-    root: String,
+    pub root: String,
 
     // edges: Vec<Edge>,
-    nodes: IndexMap<String, NodeIndex>,
+    pub nodes: IndexMap<String, NodeIndex>,
 
     #[allow(dead_code)]
     /// Default: 0.7
@@ -146,10 +143,10 @@ impl ArtistTree {
             for parent in parents {
                 let map = get_similar_artists(&parent, pool).await?;
 
-                println!("{}", parent);
-                for (k, v) in map.iter().take(5) {
-                    println!("{k} {v}");
-                }
+                // println!("{}", parent);
+                // for (k, v) in map.iter().take(5) {
+                //     println!("{k} {v}");
+                // }
 
                 for (c, sim) in map.iter().filter(|x| *x.1 >= 70) {
                     // if c.is_empty() {
@@ -187,7 +184,7 @@ impl ArtistTree {
     ) -> anyhow::Result<String> {
         // echo {out} | <fdp|dot> -Tsvg | display
 
-        println!("starting dot {:#?}", self.graph);
+        // println!("starting dot {:#?}", self.graph);
         let dot = Dot::new(&self.graph);
         let ext = match fmt {
             DotOutput::Png => "png",
@@ -221,50 +218,6 @@ impl ArtistTree {
 
         // Ok(())
     }
-
-    pub async fn as_html(&self) -> anyhow::Result<String> {
-        let svg = self
-            .as_dot(DotOutput::Svg)
-            .await?
-            .lines()
-            .skip(3)
-            .join("\n");
-
-        // OrderedMap::new().descending_values().into_iter();
-        println!("{:#?}", self.graph);
-
-        let links = self
-            .nodes
-            .keys()
-            .filter(|n| **n != self.root)
-            .sorted() // does not affect graph
-            // .map(|x| format!("<li>{}</li>", get_lastfm_url(x)))
-            // .map(|x| format!("<tr>{}</tr>", get_lastfm_url(x)))
-            .map(|n| {
-                format!(
-                    r#"<li><a href="https://last.fm/music/{}">{}</a></li>"#,
-                    encode(n),
-                    n
-                )
-            })
-            .join("\n");
-
-        let html = format!(
-            r#"
-<!doctype html>
-<html>
-  <body>
-    <h1>{}</h1>
-    {svg}
-  </body>
-  <ol>
-    {links}
-  </ol>
-</html>"#,
-            self.root.clone(),
-        );
-        Ok(html)
-    }
 }
 
 pub enum DotOutput {
@@ -292,12 +245,19 @@ mod tests {
         assert!(!tree.nodes.is_empty());
 
         let obtained_nodes: Vec<&str> = tree.nodes.keys().map(|s| s.as_str()).collect();
-        println!("nodes {:#?}", tree.nodes);
+        // println!("nodes {:#?}", tree.nodes);
         // println!("nodes vec {:#?}", obtained_nodes);
         assert_eq!(obtained_nodes, expected_nodes);
 
-        // let html = tree.as_html().await.unwrap();
-        // assert_eq!(html.matches("<li>").count(), expected.len() - 1);
+        let html = tree.as_html().await.unwrap();
+        assert_eq!(
+            html.matches(
+                // "<li>"
+                "<tr><td>"
+            )
+            .count(),
+            expected_nodes.len() - 1
+        );
     }
 
     #[tokio::test]

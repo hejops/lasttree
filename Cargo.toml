@@ -12,6 +12,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 indexmap = "2.2.6"
 itertools = "0.13.0"
 lazy_static = "1.4.0"
+maud = "0.26.0"
 ordered-map = "0.4.2"
 petgraph = "0.6.5"
 reqwest = { version = "0.12.4" }                       #, features = ["blocking"] }

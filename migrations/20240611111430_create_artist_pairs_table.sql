@@ -9,4 +9,3 @@ CREATE TABLE IF NOT EXISTS artist_pairs(
 	-- PRIMARY KEY (parent_lower, child_lower)
 	PRIMARY KEY (parent, child)
 );
-
