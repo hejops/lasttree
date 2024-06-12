@@ -9,6 +9,7 @@ edition = "2021"
 actix-web = "4.6.0"
 anyhow = "1.0.86"
 clap = { version = "4.5.4", features = ["derive"] }
+indexmap = "2.2.6"
 itertools = "0.13.0"
 lazy_static = "1.4.0"
 ordered-map = "0.4.2"

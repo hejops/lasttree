@@ -64,16 +64,16 @@ pub async fn get_artist_pairs(
 ) -> anyhow::Result<Vec<Edge>> {
     let lower = name.to_lowercase();
 
-    let pairs = sqlx::query!(
+    let mut pairs: Vec<Edge> = sqlx::query!(
         r#"
             SELECT
                 parent,
                 child,
                 similarity
             FROM artist_pairs
-            WHERE $1 
+            WHERE $1
             -- https://stackoverflow.com/a/13916417
-            -- IN (parent_lower, child_lower); 
+            -- IN (parent_lower, child_lower);
             = parent_lower;
         "#,
         lower,
@@ -87,6 +87,8 @@ pub async fn get_artist_pairs(
         similarity: r.similarity,
     })
     .collect();
+
+    pairs.sort_by_key(|x| -x.similarity);
 
     Ok(pairs)
 }

@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::f64;
 
 use anyhow::Context;
+use indexmap::IndexMap;
 use serde::de;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -23,7 +24,18 @@ struct Artist {
     /// `NUMERIC` type)
     #[serde(rename = "match", deserialize_with = "str_to_f64")]
     pub similarity: f64,
-    // pub url: String,
+
+    /// Used for `ArtistTree::as_html`
+    pub url: String,
+}
+
+impl PartialEq for Artist {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.name == other.name
+    }
 }
 
 /// Top-level
@@ -55,8 +67,8 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
 pub async fn get_cached_similar_artists(
     canon: &str,
     pool: &SqPool,
-) -> anyhow::Result<HashMap<String, i64>> {
-    let mut map = HashMap::new();
+) -> anyhow::Result<IndexMap<String, i64>> {
+    let mut map = IndexMap::new();
     for pair in get_artist_pairs(canon, pool).await? {
         map.insert(pair.child, pair.similarity);
     }
@@ -65,16 +77,17 @@ pub async fn get_cached_similar_artists(
 }
 
 /// Fetches from db if `artist` has been cached in the `artists` table.
-/// Otherwise, the network request is processed and cached so it can be skipped
-/// the next time.
+/// Otherwise, a network request to last.fm is made, and the request is
+/// processed and cached so it can be skipped the next time.
 ///
 /// Notes:
 /// - `artist` will **not** be included in the map's keys
 /// - the maximum similarity is 100
-pub async fn get_lastfm_similar_artists(
+/// - sort order is similarity, descending
+pub async fn get_similar_artists(
     artist: &str,
     pool: &SqPool,
-) -> anyhow::Result<HashMap<String, i64>> {
+) -> anyhow::Result<IndexMap<String, i64>> {
     if let Some(canon) = get_artist_from_db(artist, pool).await? {
         let cached = get_cached_similar_artists(&canon, pool).await?;
         return Ok(cached);
@@ -93,19 +106,26 @@ pub async fn get_lastfm_similar_artists(
         .get("similarartists")
         .context("no similarartists")?;
 
-    let root: LastfmArtist = serde_json::from_value(json.clone())?;
+    let json: LastfmArtist = serde_json::from_value(json.clone())?;
     let canon_name: String =
-        serde_json::from_value(root.attr.get("artist").context("no artist field")?.clone())?;
+        serde_json::from_value(json.attr.get("artist").context("no artist field")?.clone())?;
     store_artist(&canon_name, pool).await?;
 
-    let mut map = HashMap::new();
-    for sim in root.similar_artists {
-        // store_artist(&sim.name, &pool).await?;
+    // let mut map = HashMap::new(); // HashMap uses arbitrary order
+    // let mut map = BTreeMap::new(); // BTreeMap always sorts by key
+    let mut map = IndexMap::new();
+
+    for sim in json.similar_artists {
         store_artist_pair(&canon_name, &sim.name, sim.similarity, pool).await?;
         map.insert(sim.name, (sim.similarity * 100.0) as i64);
     }
 
-    // println!("{:#?} {artist}", map);
+    // println!("{}", artist);
+    // for (k, v) in map.iter().take(10) {
+    //     println!("{k} {v}");
+    // }
+
+    // println!("{:#?}", map);
     // panic!();
 
     Ok(map)
@@ -115,14 +135,14 @@ pub async fn get_lastfm_similar_artists(
 mod tests {
 
     use crate::get_artist_pairs;
-    use crate::get_lastfm_similar_artists;
+    use crate::get_similar_artists;
     use crate::init_test_db;
 
     #[tokio::test]
     async fn standard() {
         let pool = &init_test_db().await.pool;
 
-        let retrieved = get_lastfm_similar_artists("loona", pool).await.unwrap();
+        let retrieved = get_similar_artists("loona", pool).await.unwrap();
         assert_eq!(retrieved.len(), 100);
         assert_eq!(retrieved.values().max(), Some(&100));
 
@@ -135,7 +155,7 @@ mod tests {
     async fn special_chars() {
         let pool = &init_test_db().await.pool;
 
-        let retrieved = get_lastfm_similar_artists("loona 1/3", pool).await.unwrap();
+        let retrieved = get_similar_artists("loona 1/3", pool).await.unwrap();
         assert_eq!(retrieved.len(), 100);
         assert_eq!(retrieved.values().max(), Some(&100));
 
@@ -148,7 +168,7 @@ mod tests {
     async fn cached_result() {
         let pool = &init_test_db().await.pool;
         // TODO: test that only 1 http request made -- Mock?
-        get_lastfm_similar_artists("loona", pool).await.unwrap();
-        get_lastfm_similar_artists("loona", pool).await.unwrap();
+        get_similar_artists("loona", pool).await.unwrap();
+        get_similar_artists("loona", pool).await.unwrap();
     }
 }

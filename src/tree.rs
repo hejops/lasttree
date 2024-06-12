@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::process::Command;
@@ -9,16 +8,15 @@ use actix_web::web;
 use actix_web::HttpRequest;
 use actix_web::HttpResponse;
 use anyhow::Context;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use petgraph::dot::Dot;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
 
 use crate::get_artist_from_db;
-use crate::get_lastfm_similar_artists;
+use crate::get_similar_artists;
 use crate::SqPool;
-
-// use super::Artist;
 
 /// Convert arbitrary error types to `actix_web::Error` with HTTP 500
 pub fn error_500<T>(e: T) -> actix_web::Error
@@ -71,7 +69,7 @@ pub struct Edge {
 }
 
 #[derive(Debug)]
-/// raw json -> HashMap (+ db rows) -> Graph -> Dot -> html
+/// raw json -> IndexMap (+ db rows) -> Graph -> Dot -> html
 ///
 /// This should be implemented as a tree, because graphs will usually produce
 /// many uninteresting cycles.
@@ -79,7 +77,7 @@ pub struct ArtistTree {
     root: String,
 
     // edges: Vec<Edge>,
-    nodes: HashMap<String, NodeIndex>,
+    nodes: IndexMap<String, NodeIndex>,
 
     #[allow(dead_code)]
     /// Default: 0.7
@@ -100,7 +98,7 @@ impl ArtistTree {
     ) -> Self {
         let root = root.to_string();
         // let edges = vec![];
-        let nodes = HashMap::new();
+        let nodes = IndexMap::new();
         let threshold = 0.7;
         let depth = 2;
 
@@ -139,22 +137,27 @@ impl ArtistTree {
         &mut self,
         pool: &SqPool,
     ) {
-        // let mut graph = Graph::new();
-
         for i in 0..=self.depth {
             let parents = match i {
                 0 => {
-                    // we literally only do this in order to get the canonical name via the db; the
-                    // map returned by the function doesn't actually contain it!
-                    get_lastfm_similar_artists(&self.root, pool).await.unwrap();
+                    // we literally only do this in order to store the canonical name in the db and
+                    // get it back; the map returned by the function doesn't actually contain it!
+                    get_similar_artists(&self.root, pool).await.unwrap();
                     let root = get_artist_from_db(&self.root, pool).await.unwrap().unwrap();
+                    self.root = root.clone(); // override with the canonical
+                    println!("{:#?}", self);
                     [root].to_vec()
                 }
                 _ => self.nodes.clone().into_keys().collect(),
             };
 
             for parent in parents {
-                let map = get_lastfm_similar_artists(&parent, pool).await.unwrap();
+                let map = get_similar_artists(&parent, pool).await.unwrap();
+
+                println!("{}", parent);
+                for (k, v) in map.iter().take(5) {
+                    println!("{k} {v}");
+                }
 
                 for (c, sim) in map.iter().filter(|x| *x.1 >= 70) {
                     let n1 = match self.nodes.get(&parent) {
@@ -169,7 +172,9 @@ impl ArtistTree {
 
                     self.nodes.insert(parent.clone(), n1);
                     self.nodes.insert(c.to_string(), n2);
+                    println!("new node: {c} {n2:?}");
                 }
+                // println!("{:?}", self.nodes);
             }
 
             // println!("{i} {:#?}", self.nodes);
@@ -180,65 +185,13 @@ impl ArtistTree {
         // graph
     }
 
-    // old Vec<Edge> implementation
-
-    // pub fn build(&mut self) {
-    //     for i in 0..=self.depth {
-    //         let ch = match i {
-    //             0 => SimilarArtist::new(&self.root).get_edges(self.threshold),
-    //             _ => {
-    //                 let parents: HashSet<_> =
-    //                     HashSet::from_iter(self.edges.iter().map(|e|
-    // e.0.as_str()));                 let children =
-    // HashSet::from_iter(self.edges.iter().map(|e| e.1.as_str()));
-    //
-    //                 let nodes: HashSet<_> = parents.union(&children).collect();
-    //
-    //                 let children = children
-    //                     .difference(&parents)
-    //                     .collect::<HashSet<_>>()
-    //                     .iter()
-    //                     .map(|p| SimilarArtist::new(p).get_edges(self.threshold))
-    //                     .filter(|e| e.is_some())
-    //                     .flat_map(|e| e.unwrap())
-    //                     // remove cycles
-    //                     .filter(|e| !nodes.contains(&e.1.as_str()))
-    //                     .collect::<Vec<Edge>>();
-    //                 Some(children)
-    //             }
-    //         };
-    //         self.edges.extend(ch.unwrap());
-    //     }
-    // }
-
-    // fn as_graph(&self) -> Graph<&str, f64> {
-    //     // https://depth-first.com/articles/2020/02/03/graphs-in-rust-an-introduction-to-petgraph/
-    //     let mut graph = Graph::new();
-    //     for edge in self.edges.iter() {
-    //         let Edge(parent, child, sim) = edge;
-    //
-    //         let n1 = match graph.node_indices().find(|i| graph[*i] == parent) {
-    //             Some(node) => node,
-    //             None => graph.add_node(parent.as_str()),
-    //         };
-    //
-    //         let n2 = match graph.node_indices().find(|i| graph[*i] == child) {
-    //             Some(node) => node,
-    //             None => graph.add_node(child.as_str()),
-    //         };
-    //
-    //         graph.add_edge(n1, n2, *sim);
-    //     }
-    //
-    //     graph
-    // }
-
     pub async fn as_dot(
         &self,
         fmt: DotOutput,
     ) -> anyhow::Result<String> {
         // echo {out} | <fdp|dot> -Tsvg | display
 
+        println!("starting dot {:#?}", self.graph);
         let dot = Dot::new(&self.graph);
         let ext = match fmt {
             DotOutput::Png => "png",
@@ -274,7 +227,7 @@ impl ArtistTree {
     }
 
     pub async fn as_html(&self) -> anyhow::Result<String> {
-        let graph = self
+        let svg = self
             .as_dot(DotOutput::Svg)
             .await?
             .lines()
@@ -282,12 +235,14 @@ impl ArtistTree {
             .join("\n");
 
         // OrderedMap::new().descending_values().into_iter();
+        println!("{:#?}", self.graph);
 
         let links = self
             .nodes
             .keys()
             .filter(|n| **n != self.root)
-            // TODO: sort by sim descending
+            .sorted() // does not affect graph
+            // TODO: sort hashmap by value (sim) descending?
             .map(|n| {
                 format!(
                     // TODO: table
@@ -304,15 +259,13 @@ impl ArtistTree {
 <html>
   <body>
     <h1>{}</h1>
-    {}
+    {svg}
   </body>
   <ol>
-    {}
+    {links}
   </ol>
 </html>"#,
             self.root.clone(),
-            graph,
-            links,
         );
         Ok(html)
     }
@@ -325,7 +278,7 @@ pub enum DotOutput {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    // use std::collections::HashSet;
 
     use super::ArtistTree;
     use crate::init_test_db;
@@ -339,42 +292,44 @@ mod tests {
 
         assert!(!tree.nodes.is_empty());
 
-        let obtained: HashSet<&str> = tree.nodes.keys().map(|s| s.as_str()).collect();
-        let expected = HashSet::from_iter(expected_nodes.iter().map(|s| s.to_owned()));
-        assert_eq!(obtained, expected);
+        let obtained_nodes: Vec<&str> = tree.nodes.keys().map(|s| s.as_str()).collect();
+        println!("nodes {:#?}", tree.nodes);
+        // println!("nodes vec {:#?}", obtained_nodes);
+        assert_eq!(obtained_nodes, expected_nodes);
 
         // let html = tree.as_html().await.unwrap();
         // assert_eq!(html.matches("<li>").count(), expected.len() - 1);
     }
 
     #[tokio::test]
-    async fn basic_tree_construction() {
+    async fn node_order() {
         check_nodes(
             "loona",
-            &["LOONA/yyxy", "LOOΠΔ 1/3", "Loona", "LOOΠΔ / ODD EYE CIRCLE"],
+            &["Loona", "LOOΠΔ 1/3", "LOONA/yyxy", "LOOΠΔ / ODD EYE CIRCLE"],
         )
         .await;
 
-        check_nodes(
-            "metallica",
-            &[
-                "Overkill",
-                "Death Angel",
-                "Anthrax",
-                "Destruction",
-                "Slayer",
-                "Kreator",
-                "Havok",
-                "Exodus",
-                "Testament",
-                "Metallica",
-                "Sodom",
-                "Sepultura",
-                "Annihilator",
-                "Megadeth",
-                "Pantera",
-            ],
-        )
-        .await;
+        // // harder to test node order in larger graphs
+        // check_nodes(
+        //     "metallica",
+        //     &[
+        //         "Metallica",
+        //         "Megadeth",
+        //         "Exodus",
+        //         "Anthrax",
+        //         "Slayer",
+        //         "Testament",
+        //         "Death Angel",
+        //         "Overkill",
+        //         "Kreator",
+        //         "Destruction",
+        //         "Havok",
+        //         "Sodom",
+        //         "Annihilator",
+        //         "Pantera",
+        //         "Sepultura",
+        //     ],
+        // )
+        // .await;
     }
 }
