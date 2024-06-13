@@ -1,3 +1,7 @@
+//! Module for fetching similar artists from last.fm API
+//!
+//! http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json
+
 use std::f64;
 
 use anyhow::Context;
@@ -103,20 +107,11 @@ pub async fn get_similar_artists(
         map.insert(sim.name, (sim.similarity * 100.0) as i64);
     }
 
-    // println!("{}", artist);
-    // for (k, v) in map.iter().take(10) {
-    //     println!("{k} {v}");
-    // }
-
-    // println!("{:#?}", map);
-    // panic!();
-
     Ok(map)
 }
 
 #[cfg(test)]
 mod tests {
-
     use crate::get_artist_pairs;
     use crate::get_similar_artists;
     use crate::tests::init_test_db;
@@ -163,7 +158,10 @@ mod tests {
     #[tokio::test]
     async fn cached_result() {
         let pool = &init_test_db().await.pool;
-        // TODO: test that only 1 http request made -- Mock?
+
+        // TODO: test that only 1 http request made -- Mock seems unsuitable, since it
+        // tests requests made to our (mocked) server. we want to check the number of
+        // outgoing GET requests to any server
         get_similar_artists("loona", pool).await.unwrap();
         get_similar_artists("loona", pool).await.unwrap();
     }

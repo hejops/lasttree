@@ -18,18 +18,19 @@ async fn main() -> anyhow::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            // .route("/", web::get().to(home))
-            // .route("/artists", web::get().to(search_artist))
-            // .route("/artists/{artist}", web::get().to(get_artist))
             // i prefer
             //      .service(foo) + #[get("/foo")] fn foo
             // over
             //      .route("/foo", web::get().to(foo))
             // because it keeps `App` clean, and the route is more closely coupled to the function
             // https://actix.rs/docs/url-dispatch/#scoping-routes
+            //
+            // .route("/", web::get().to(home))
             .service(routes::home)
-            .service(routes::search_artist)
-            .service(routes::get_artist)
+            .service(routes::search_artists)
+            .service(routes::post_artists)
+            .service(routes::show_artist)
+            .default_service(web::route().to(routes::not_found))
             .app_data(pool.clone())
     })
     .bind(("127.0.0.1", 3838))?

@@ -2,6 +2,7 @@ use itertools::Itertools;
 use maud::html;
 use maud::Markup;
 use maud::PreEscaped;
+use urlencoding::encode;
 
 use crate::ArtistTree;
 use crate::DotOutput;
@@ -36,29 +37,39 @@ impl ArtistTree {
             .skip(3)
             .join("\n");
 
-        // println!("{:#?}", self.graph);
-
-        // order should be independent of graph
-        // TODO: .sort by similarity, now that we have get_child_similarity
-        let artists = self.nodes.keys().filter(|n| **n != self.root).sorted();
+        // order should be independent of graph node order
+        // TODO: sort method via url param (htmx idea?)
+        let mut artists: Vec<&String> = self.nodes.keys().filter(|n| **n != self.root).collect();
+        if true {
+            artists.sort_by_key(|a| -self.get_child_similarity(a));
+        } else {
+            artists.sort()
+        };
 
         let html = html! {
             html {
+                style {
+                    "table, th, td { border: 1px solid grey; }"
+                }
                 title { "lasttree: "(self.root) }
+                a href=("/") { "Home" }
                 body {
                     // h1 { (self.root) }
-                    h1 { a href=(format!("https://last.fm/music/{}", self.root)) { (self.root) } }
+                    h1 {
+                        a href=(format!("https://last.fm/music/{}", self.root))
+                        { (self.root) }
+                    }
                     (PreEscaped(svg))
                 }
                 table {
                     th { "Artist" }
+                    th { "Similarity" }
                     th { "Last.fm" }
                     @for artist in artists {
-                        // TODO: artist -> get sim
                         tr {
-                            td { a href=(format!("/artists/{artist}")) { (artist) } }
+                            td { a href=(format!("/artists/{}", encode(artist))) { (artist) } }
+                            td { (self.get_child_similarity(artist)) }
                             td { a href=(format!("https://last.fm/music/{artist}")) { "↪" } }
-
                         }
                     }
                 }

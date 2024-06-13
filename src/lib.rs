@@ -36,4 +36,5 @@ pub use tree::*;
 lazy_static! {
     static ref LASTFM_KEY: String =
         env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
+    static ref APP_NAME: String = "Last".to_string();
 }

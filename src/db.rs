@@ -8,6 +8,8 @@ use sqlx::Sqlite;
 
 pub type SqPool = Pool<Sqlite>;
 
+// TODO: seed db with the 25 most popular artists of a given genre
+
 pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
     // to enable `sqlx migrate run`, ensure sqlx-cli is installed with the
     // appropriate feature: cargo install sqlx-cli -F rustls,postgres,sqlite[,...]

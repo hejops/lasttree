@@ -7,7 +7,6 @@ use anyhow::Context;
 use indexmap::IndexMap;
 use petgraph::algo::astar;
 use petgraph::dot::Dot;
-use petgraph::graph::EdgeIndex;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::NodeIndexable;
@@ -51,7 +50,7 @@ impl ArtistTree {
     pub async fn new(
         root: &str,
         pool: &SqPool,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let root = root.to_string();
         let nodes = IndexMap::new();
         let threshold = 0.7;
@@ -65,8 +64,8 @@ impl ArtistTree {
             graph: Graph::new(),
         };
 
-        tree.build_graph(pool).await.unwrap();
-        tree
+        tree.build_graph(pool).await?;
+        Ok(tree)
     }
 
     // fn with_threshold(
@@ -143,6 +142,7 @@ impl ArtistTree {
         Ok(())
     }
 
+    /// Uses `dot` layout by default
     pub async fn as_dot(
         &self,
         fmt: DotOutput,
@@ -155,6 +155,8 @@ impl ArtistTree {
             DotOutput::Png => "png",
             DotOutput::Svg => "svg",
         };
+
+        // afaik, there is no rust crate for dot -> svg conversion
 
         // let out = format!("{}.{}", self.root, ext);
 
@@ -195,7 +197,7 @@ impl ArtistTree {
 
     /// Given an arbitrary `child` node, calculate its similarity to the root
     /// node by multiplying edge weights successively
-    fn get_child_similarity(
+    pub fn get_child_similarity(
         &self,
         child: &str,
     ) -> i64 {
@@ -251,7 +253,7 @@ mod tests {
         expected_nodes: &[&str],
     ) {
         let pool = &init_test_db().await.pool;
-        let tree = ArtistTree::new(root, pool).await;
+        let tree = ArtistTree::new(root, pool).await.unwrap();
 
         assert!(!tree.nodes.is_empty());
 
@@ -275,35 +277,12 @@ mod tests {
             &["Loona", "LOOΠΔ 1/3", "LOONA/yyxy", "LOOΠΔ / ODD EYE CIRCLE"],
         )
         .await;
-
-        // // harder to test node order in larger graphs
-        // check_nodes(
-        //     "metallica",
-        //     &[
-        //         "Metallica",
-        //         "Megadeth",
-        //         "Exodus",
-        //         "Anthrax",
-        //         "Slayer",
-        //         "Testament",
-        //         "Death Angel",
-        //         "Overkill",
-        //         "Kreator",
-        //         "Destruction",
-        //         "Havok",
-        //         "Sodom",
-        //         "Annihilator",
-        //         "Pantera",
-        //         "Sepultura",
-        //     ],
-        // )
-        // .await;
     }
 
     #[tokio::test]
     async fn child_similarity() {
         let pool = &init_test_db().await.pool;
-        let tree = ArtistTree::new("metallica", pool).await;
+        let tree = ArtistTree::new("metallica", pool).await.unwrap();
         let sim = tree.get_child_similarity("Annihilator");
         assert_eq!(sim, 51);
     }
