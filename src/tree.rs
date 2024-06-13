@@ -5,9 +5,12 @@ use std::process::Stdio;
 
 use anyhow::Context;
 use indexmap::IndexMap;
+use petgraph::algo::astar;
 use petgraph::dot::Dot;
+use petgraph::graph::EdgeIndex;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
+use petgraph::visit::NodeIndexable;
 
 use crate::get_canonical_name;
 use crate::get_similar_artists;
@@ -96,7 +99,7 @@ impl ArtistTree {
                     get_similar_artists(&self.root, pool).await?;
                     let root = get_canonical_name(&self.root, pool).await?.context("")?;
                     self.root = root.clone(); // override with the canonical
-                    println!("{:#?}", self);
+                                              // println!("{:#?}", self);
                     [root].to_vec()
                 }
                 _ => self.nodes.clone().into_keys().collect(),
@@ -180,6 +183,52 @@ impl ArtistTree {
 
         // Ok(())
     }
+
+    fn get_node_index(
+        &self,
+        node_label: &str,
+    ) -> Option<NodeIndex> {
+        self.graph
+            .node_indices()
+            .find(|i| self.graph[*i] == node_label)
+    }
+
+    /// Given an arbitrary `child` node, calculate its similarity to the root
+    /// node by multiplying edge weights successively
+    fn get_child_similarity(
+        &self,
+        child: &str,
+    ) -> i64 {
+        // println!("{:#?}", self.graph);
+        let root = self.graph.from_index(0);
+        let target = self.get_node_index(child).unwrap();
+
+        // println!("0 {:#?}", self.graph.node_weight(root)); // n_idx -> Option<str>
+
+        // generally, Graph methods only operate on single edges. to get a path between
+        // 2 arbitrary edges, an `algorithm` is required
+
+        // https://docs.rs/petgraph/latest/petgraph/algo/astar/fn.astar.html#example
+        let path = astar(
+            //
+            &self.graph,
+            root,
+            |n| n == target,
+            |_| 1,
+            |_| 1,
+        )
+        .unwrap()
+        .1;
+
+        // let x = self.graph.index_twice_mut(path[0], path[3]);
+        // println!("{:?}", x);
+
+        // https://github.com/a-b-street/abstreet/blob/35d669cf7aa9b6d24cd0cfe423f0dfc4037b4357/map_model/src/map.rs#L880
+        path.windows(2)
+            .map(|pair| self.graph.find_edge(pair[0], pair[1]).unwrap())
+            .map(|e| self.graph.edge_weight(e).unwrap())
+            .fold(100, |acc, x| (acc * x) / 100)
+    }
 }
 
 pub enum DotOutput {
@@ -222,6 +271,7 @@ mod tests {
     async fn node_order() {
         check_nodes(
             "loona",
+            // artist (canonical), followed by similar artists in descending similarity
             &["Loona", "LOOΠΔ 1/3", "LOONA/yyxy", "LOOΠΔ / ODD EYE CIRCLE"],
         )
         .await;
@@ -248,5 +298,13 @@ mod tests {
         //     ],
         // )
         // .await;
+    }
+
+    #[tokio::test]
+    async fn child_similarity() {
+        let pool = &init_test_db().await.pool;
+        let tree = ArtistTree::new("metallica", pool).await;
+        let sim = tree.get_child_similarity("Annihilator");
+        assert_eq!(sim, 51);
     }
 }

@@ -14,9 +14,14 @@ use std::env;
 
 use lazy_static::lazy_static;
 
-// pub use routes::*;
-// pub use tests::*;
-// TODO: when to use pub mod / mod + pub use?
+// on `pub mod` vs `mod + pub use`:
+//
+// my principle is to use `pub use foo::*;` if it is ok to refer to (/import)
+// functions "directly", without importing their namespace. this usually means
+// functions precisely named.
+//
+// https://users.rust-lang.org/t/principles-for-using-mod-vs-pub-mod/27814/2
+
 mod db;
 mod html;
 mod lastfm;

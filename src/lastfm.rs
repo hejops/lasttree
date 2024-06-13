@@ -118,9 +118,7 @@ pub async fn get_similar_artists(
 mod tests {
 
     use crate::get_artist_pairs;
-    use crate::get_lastfm_url;
     use crate::get_similar_artists;
-    use crate::table_row;
     use crate::tests::init_test_db;
 
     #[tokio::test]
@@ -168,17 +166,5 @@ mod tests {
         // TODO: test that only 1 http request made -- Mock?
         get_similar_artists("loona", pool).await.unwrap();
         get_similar_artists("loona", pool).await.unwrap();
-    }
-
-    #[test]
-    fn html() {
-        let x = "loona";
-        let link = get_lastfm_url(x);
-        assert_eq!(link, r#"<a href="https://last.fm/music/loona">loona</a>"#);
-        let row = table_row(link);
-        assert_eq!(
-            row,
-            r#"<tr><td><a href="https://last.fm/music/loona">loona</a></td></tr>"#
-        );
     }
 }

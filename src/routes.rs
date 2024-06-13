@@ -21,6 +21,7 @@ pub async fn search_artist() -> actix_web::Result<Markup> {
 
 #[get("/artists/{artist}")]
 pub async fn get_artist(
+    // https://actix.rs/docs/url-dispatch/#scoping-routes
     path: web::Path<String>,
     pool: web::Data<SqPool>,
 ) -> actix_web::Result<Markup> {
