@@ -40,7 +40,7 @@ pub struct ArtistTree {
     /// Default: 2
     depth: u8,
 
-    graph: Graph<String, String>,
+    graph: Graph<String, i64>,
 }
 
 impl ArtistTree {
@@ -122,7 +122,7 @@ impl ArtistTree {
                         Some(_) => continue,
                         None => self.graph.add_node(c.to_string()),
                     };
-                    self.graph.add_edge(n1, n2, sim.to_string());
+                    self.graph.add_edge(n1, n2, *sim);
 
                     self.nodes.insert(parent.clone(), n1);
                     self.nodes.insert(c.to_string(), n2);
