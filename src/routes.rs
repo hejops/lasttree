@@ -8,12 +8,12 @@ use maud::Markup;
 use serde::Deserialize;
 
 use crate::error_500;
-use crate::html;
+use crate::html; // should not conflict with maud::html
 use crate::ArtistTree;
 use crate::SqPool;
 use crate::APP_NAME;
 
-pub async fn redirect(path: &str) -> impl Responder {
+async fn redirect(path: &str) -> impl Responder {
     HttpResponse::SeeOther()
         .insert_header(("Location", path))
         .finish()
@@ -22,7 +22,7 @@ pub async fn redirect(path: &str) -> impl Responder {
 pub async fn not_found() -> impl Responder { redirect("/").await }
 
 #[get("/")]
-pub async fn home() -> actix_web::Result<Markup> {
+async fn home() -> actix_web::Result<Markup> {
     let html = html! {
         h1 { (APP_NAME.to_string()) }
         ul {
@@ -53,7 +53,9 @@ pub async fn search_artists() -> actix_web::Result<Markup> {
                 button type="submit" { "Search" }
             }
         }
-        button type="submit" { "Random" }
+        // button type="submit" { "Random" }
+        // (PreEscaped(html::toggle()))
+        // (svg())
     };
     Ok(html)
 }
@@ -67,13 +69,13 @@ struct ArtistFormData {
 }
 
 #[post("/artists")]
-pub async fn post_artists(form: web::Form<ArtistFormData>) -> impl Responder {
+async fn post_artists(form: web::Form<ArtistFormData>) -> impl Responder {
     let path = format!("/artists/{}", form.0.artist);
     redirect(&path).await
 }
 
 #[get("/artists/{artist}")]
-pub async fn show_artist(
+async fn show_artist(
     // https://actix.rs/docs/url-dispatch/#scoping-routes
     // TODO: capture url params? (e.g. /artists/foo?key=val)
     path: web::Path<String>,
@@ -97,6 +99,38 @@ pub async fn show_artist(
 
     Ok(html)
 }
+
+// #[derive(Deserialize)]
+// struct ArtistTreeData {
+//     svg: String,
+// }
+//
+// #[post("/artists/{artist}/svg")]
+// async fn post_artists_svg(form: web::Form<ArtistTreeData>) -> impl Responder
+// {     println!("received POST /artists/X/svg");
+//     assert!(form.0.svg.ends_with("</svg>"));
+//     let path = format!("/svg/{}", BASE64.encode(form.0.svg));
+//     redirect(&path).await
+// }
+//
+// // TODO: should probably be scoped?
+// // TODO: redirect to / on decode failure
+// #[get("/svg/{svg}")]
+// async fn show_artist_svg(path: web::Path<String>) ->
+// actix_web::Result<HttpResponse> {     let b64 = path.into_inner();
+//     // let byt = match BASE64.decode(b64) {
+//     //     Ok(b) => b,
+//     //     Err(_) => return redirect("/").await,
+//     // };
+//     let byt = BASE64.decode(b64).map_err(error_500)?;
+//     let svg = std::str::from_utf8(&byt)?.to_string();
+//     assert!(svg.ends_with("</svg>"));
+//
+//     // Ok(html! { (PreEscaped(svg))})
+//     Ok(HttpResponse::Ok()
+//         .content_type(ContentType::html())
+//         .body(svg))
+// }
 
 #[cfg(test)]
 mod tests {

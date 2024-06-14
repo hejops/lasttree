@@ -10,10 +10,6 @@
 // "edge-only" Vec<Edge>. then i also found -that- ugly, and switched to a
 // HashMap.
 
-use std::env;
-
-use lazy_static::lazy_static;
-
 // on `pub mod` vs `mod + pub use`:
 //
 // my principle is to use `pub use foo::*;` if it is ok to refer to (/import)
@@ -33,8 +29,14 @@ pub use db::*;
 // pub use lastfm::*;
 pub use tree::*;
 
-lazy_static! {
+lazy_static::lazy_static! {
     static ref LASTFM_KEY: String =
-        env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
+        std::env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
     static ref APP_NAME: String = "Last".to_string();
+
+    /// A base64 engine used to crudely pass data from one endpoint to another
+    static ref BASE64: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
+        &base64::alphabet::URL_SAFE,
+        base64::engine::general_purpose::NO_PAD
+    );
 }

@@ -30,6 +30,8 @@ async fn main() -> anyhow::Result<()> {
             .service(routes::search_artists)
             .service(routes::post_artists)
             .service(routes::show_artist)
+            // .service(routes::show_artist_svg)
+            // .service(routes::post_artists_svg)
             .default_service(web::route().to(routes::not_found))
             .app_data(pool.clone())
     })

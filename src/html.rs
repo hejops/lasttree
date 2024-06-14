@@ -2,12 +2,36 @@ use itertools::Itertools;
 use maud::html;
 use maud::Markup;
 use maud::PreEscaped;
+use scraper::Html;
+use scraper::Selector;
 use urlencoding::encode;
 
 use crate::ArtistTree;
 use crate::DotOutput;
+use crate::APP_NAME;
 
-// TODO: should this be an ArtistTree method? hmm...
+// pub fn svg(
+//     artist: &str,
+//     raw_svg: &str,
+// ) -> Markup {
+//     // https://github.com/bigskysoftware/htmx/blob/master/README.md#quick-start
+//     // https://stackoverflow.com/a/77994867
+//
+//     // interestingly, maud will render htmx in a box, with monospace font.
+//     // potentially, this may be circumvented if css is applied?
+//     html! {
+//         script src="https://unpkg.com/htmx.org/dist/htmx.min.js" {}
+//
+//         button
+//             hx-post={"/artists/"(artist)"/svg"}
+//             name="svg"
+//             value=(raw_svg)
+//             hx-swap="/outerHTML"
+//             { "Show graph (SVG)" }
+//     }
+// }
+
+// this could be an ArtistTree method, but only if this gets used a lot
 pub fn get_lastfm_url(name: &str) -> Markup {
     // https://github.com/isgasho/lettre/blob/a0980d017b1257018446228162a8d17bff17798f/examples/maud_html.rs#L24
     html! {
@@ -38,15 +62,16 @@ pub fn list_item(s: &str) -> Markup {
 
 impl ArtistTree {
     pub async fn as_html(&self) -> anyhow::Result<Markup> {
-        let svg = self
+        let raw_svg = self
             .as_dot(DotOutput::Svg)
             .await?
             .lines()
             .skip(3)
+            .map(linkify_svg)
             .join("\n");
 
-        // order should be independent of graph node order
-        // TODO: sort method via url param (htmx idea?)
+        // row order must be independent of graph node order
+        // TODO: sort table (frontend)
         let mut artists: Vec<&String> = self.nodes.keys().filter(|n| **n != self.root).collect();
         if true {
             artists.sort_by_key(|a| -self.get_child_similarity(a));
@@ -59,12 +84,17 @@ impl ArtistTree {
                 style {
                     "table, th, td { border: 1px solid grey; }"
                 }
-                title { "lasttree: "(self.root) }
+                title { (APP_NAME.to_string())": "(self.root) }
                 a href=("/") { "Home" }
                 body {
                     // h1 { (self.root) }
                     h1 { (get_lastfm_url(&self.root)) }
-                    (PreEscaped(svg))
+                    // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details
+                    details open {
+                        summary { "Graph" }
+                        // (PreEscaped(raw_svg))
+                        (PreEscaped(linkify_svg(&raw_svg)))
+                    }
                 }
                 table {
                     th { "Artist" }
@@ -83,6 +113,36 @@ impl ArtistTree {
 
         Ok(html)
     }
+}
+
+pub fn linkify_svg(svg: &str) -> String {
+    let mut new: Vec<String> = vec![];
+    for line in svg.lines() {
+        // if !s.contains(r#"text-anchor="middle""#) {
+        //     return s.to_string();
+        // }
+
+        if !new.is_empty() && new.last().unwrap().contains("ellipse")
+        // if let Some(last) = new.last()
+        //     && last.contains("ellipse")
+        {
+            let parsed = Html::parse_fragment(line);
+            let selector = Selector::parse("text").unwrap();
+            let elem = parsed.select(&selector).next().unwrap();
+            // println!("{:#?}", elem.parent().unwrap().tree());
+            // panic!();
+            let name = elem.text().collect::<String>();
+            // println!("{:#?}", name);
+            // https://stackoverflow.com/a/70881425
+            // https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/xlink:href
+            let n = format!(r#"<a href="/artists/{name}">{line}</a>"#);
+            new.push(n);
+        } else {
+            new.push(line.to_string());
+        }
+    }
+
+    new.join("\n")
 }
 
 #[cfg(test)]

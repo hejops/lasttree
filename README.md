@@ -12,5 +12,6 @@ This project aims to do something about it, while also scratching a few itches
 of mine at present:
 
 - web development in Rust
+- HTMX
 - SQL
-- graphs and their visualisation
+- graph visualisation and traversal

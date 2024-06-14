@@ -265,8 +265,14 @@ mod tests {
 
         let html = tree.as_html().await.unwrap();
         assert_eq!(
-            html.into_string().matches("<tr><td>").count(),
+            html.clone().into_string().matches("<tr><td>").count(),
             expected_nodes.len() - 1
+        );
+
+        assert_eq!(
+            html.into_string().matches(r#"<a href="/artists/"#).count(),
+            // graph has n links, table has n - 1 links
+            expected_nodes.len() * 2 - 1
         );
     }
 

@@ -92,21 +92,28 @@ impl ArtistTree {
         let json = raw_json
             .get("similarartists")
             .context("no similarartists")?;
+        let artist: LastfmArtist = serde_json::from_value(json.clone())?;
 
-        let json: LastfmArtist = serde_json::from_value(json.clone())?;
-        let canon_name: String =
-            serde_json::from_value(json.attr.get("artist").context("no artist field")?.clone())?;
-        self.root = canon_name;
+        let canon: String = serde_json::from_value(
+            artist
+                .attr
+                .get("artist")
+                .context("no artist field")?
+                .clone(),
+        )?;
+        // i would have liked to leave mutation of self to callers, but i'd have to
+        // return canon_name in addition to map, leading to an ugly function
+        // signature
+        self.root = canon;
         self.store(pool).await?;
 
         // let mut map = HashMap::new(); // HashMap uses arbitrary order
         // let mut map = BTreeMap::new(); // BTreeMap always sorts by key
         let mut map = IndexMap::new();
 
-        for sim in json.similar_artists {
-            self.store_artist_pair(&sim.name, sim.similarity, pool)
-                .await?;
-            map.insert(sim.name, (sim.similarity * 100.0) as i64);
+        for child in artist.similar_artists {
+            self.store_pair(&child.name, child.similarity, pool).await?;
+            map.insert(child.name, (child.similarity * 100.0) as i64);
         }
 
         Ok(map)

@@ -121,10 +121,9 @@ impl ArtistTree {
 
     /// Because sqlite does not support the `NUMERIC` type, `similarity` is cast
     /// to integer before insertion into db.
-    pub async fn store_artist_pair(
-        // name1: &str,
+    pub async fn store_pair(
         &self,
-        name2: &str,
+        child: &str,
         similarity: f64,
         pool: &Pool<Sqlite>,
     ) -> anyhow::Result<()> {
@@ -140,7 +139,7 @@ impl ArtistTree {
             VALUES ($1, $2, $3)
         "#,
             self.root,
-            name2,
+            child,
             sim_int
         )
         .execute(pool)
