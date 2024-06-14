@@ -7,6 +7,7 @@ use urlencoding::encode;
 use crate::ArtistTree;
 use crate::DotOutput;
 
+// TODO: should this be an ArtistTree method? hmm...
 pub fn get_lastfm_url(name: &str) -> Markup {
     // https://github.com/isgasho/lettre/blob/a0980d017b1257018446228162a8d17bff17798f/examples/maud_html.rs#L24
     html! {
@@ -14,7 +15,14 @@ pub fn get_lastfm_url(name: &str) -> Markup {
     }
 }
 
-pub fn table_row(s: String) -> Markup {
+pub fn link(
+    path: &str,
+    label: &str,
+) -> Markup {
+    html! { a href=(path) { (label) } }
+}
+
+pub fn table_row(s: &str) -> Markup {
     html! {
         tr {
             td { (PreEscaped(s)) }
@@ -22,7 +30,7 @@ pub fn table_row(s: String) -> Markup {
     }
 }
 
-pub fn list_item(s: String) -> Markup {
+pub fn list_item(s: &str) -> Markup {
     html! {
         li { (PreEscaped(s)) }
     }
@@ -55,10 +63,7 @@ impl ArtistTree {
                 a href=("/") { "Home" }
                 body {
                     // h1 { (self.root) }
-                    h1 {
-                        a href=(format!("https://last.fm/music/{}", self.root))
-                        { (self.root) }
-                    }
+                    h1 { (get_lastfm_url(&self.root)) }
                     (PreEscaped(svg))
                 }
                 table {
@@ -82,18 +87,18 @@ impl ArtistTree {
 
 #[cfg(test)]
 mod tests {
-    use crate::get_lastfm_url;
-    use crate::table_row;
+    use crate::html::get_lastfm_url;
+    use crate::html::table_row;
 
     #[test]
     fn table() {
         let x = "loona";
         let link = get_lastfm_url(x);
         assert_eq!(
-            link.clone().into_string(),
+            &link.clone().into_string(),
             r#"<a href="https://last.fm/music/loona">loona</a>"#
         );
-        let row = table_row(link.into());
+        let row = table_row(&link.into_string());
         assert_eq!(
             row.into_string(),
             r#"<tr><td><a href="https://last.fm/music/loona">loona</a></td></tr>"#

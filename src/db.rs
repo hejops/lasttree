@@ -6,6 +6,8 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Pool;
 use sqlx::Sqlite;
 
+use crate::ArtistTree;
+
 pub type SqPool = Pool<Sqlite>;
 
 // TODO: seed db with the 25 most popular artists of a given genre
@@ -22,43 +24,6 @@ pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
     Ok(pool)
 }
 
-/// Query `artists` table (which is much faster than `artist_pairs`)
-pub async fn get_canonical_name(
-    name: &str,
-    pool: &Pool<Sqlite>,
-) -> anyhow::Result<Option<String>> {
-    let lower = name.to_lowercase();
-    let row = sqlx::query!(
-        r#"
-            SELECT name FROM artists
-            WHERE name_lower = $1
-        "#,
-        lower,
-    )
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row.map(|r| r.name))
-}
-
-pub async fn store_artist(
-    name: &str,
-    pool: &Pool<Sqlite>,
-) -> anyhow::Result<()> {
-    let lower = name.to_lowercase();
-    sqlx::query!(
-        r#"
-            INSERT OR IGNORE INTO artists (name, name_lower)
-            VALUES ($1, $2)
-        "#,
-        name,
-        lower,
-    )
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
 #[derive(Debug)]
 pub struct ArtistPair {
     pub parent: String,
@@ -66,14 +31,52 @@ pub struct ArtistPair {
     pub similarity: i64,
 }
 
-pub async fn get_artist_pairs(
-    name: &str,
-    pool: &Pool<Sqlite>,
-) -> anyhow::Result<Vec<ArtistPair>> {
-    let name = get_canonical_name(name, pool).await?;
+impl ArtistTree {
+    /// Query `artists` table (which is much faster than `artist_pairs`)
+    pub async fn canonical_name(
+        &self,
+        pool: &Pool<Sqlite>,
+    ) -> anyhow::Result<Option<String>> {
+        let lower = self.root.to_lowercase();
+        let row = sqlx::query!(
+            r#"
+            SELECT name FROM artists
+            WHERE name_lower = $1
+        "#,
+            lower,
+        )
+        .fetch_optional(pool)
+        .await?;
 
-    let mut pairs: Vec<ArtistPair> = sqlx::query!(
-        r#"
+        Ok(row.map(|r| r.name))
+    }
+
+    pub async fn store(
+        &self,
+        pool: &Pool<Sqlite>,
+    ) -> anyhow::Result<()> {
+        let lower = self.root.to_lowercase();
+        sqlx::query!(
+            r#"
+            INSERT OR IGNORE INTO artists (name, name_lower)
+            VALUES ($1, $2)
+        "#,
+            self.root,
+            lower,
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_artist_pairs(
+        &self,
+        pool: &Pool<Sqlite>,
+    ) -> anyhow::Result<Vec<ArtistPair>> {
+        let name = self.canonical_name(pool).await?;
+
+        let mut pairs: Vec<ArtistPair> = sqlx::query!(
+            r#"
             SELECT
                 parent,
                 child,
@@ -85,48 +88,49 @@ pub async fn get_artist_pairs(
             -- = parent_lower;
             = parent;
         "#,
-        name,
-    )
-    .fetch_all(pool)
-    .await?
-    .iter()
-    .map(|r| ArtistPair {
-        parent: r.parent.clone(),
-        child: r.child.clone(),
-        similarity: r.similarity,
-    })
-    .collect();
+            name,
+        )
+        .fetch_all(pool)
+        .await?
+        .iter()
+        .map(|r| ArtistPair {
+            parent: r.parent.clone(),
+            child: r.child.clone(),
+            similarity: r.similarity,
+        })
+        .collect();
 
-    pairs.sort_by_key(|x| -x.similarity);
+        pairs.sort_by_key(|x| -x.similarity);
 
-    Ok(pairs)
-}
-
-/// `canon` must be found in `artists` table. This allows the hashmap to be
-/// built without making any network requests.
-pub async fn get_cached_similar_artists(
-    name: &str,
-    pool: &SqPool,
-) -> anyhow::Result<IndexMap<String, i64>> {
-    let mut map = IndexMap::new();
-    for pair in get_artist_pairs(name, pool).await? {
-        map.insert(pair.child, pair.similarity);
+        Ok(pairs)
     }
-    // println!("using cached result");
-    Ok(map)
-}
 
-/// Because sqlite does not support the `NUMERIC` type, `similarity` is cast to
-/// integer before insertion into db.
-pub async fn store_artist_pair(
-    name1: &str,
-    name2: &str,
-    similarity: f64,
-    pool: &Pool<Sqlite>,
-) -> anyhow::Result<()> {
-    let sim_int = (similarity * 100.0) as u32;
-    sqlx::query!(
-        r#"
+    /// `canon` must be found in `artists` table. This allows the hashmap to be
+    /// built without making any network requests.
+    pub async fn get_cached_similar_artists(
+        &self,
+        pool: &SqPool,
+    ) -> anyhow::Result<IndexMap<String, i64>> {
+        let mut map = IndexMap::new();
+        for pair in self.get_artist_pairs(pool).await? {
+            map.insert(pair.child, pair.similarity);
+        }
+        // println!("using cached result");
+        Ok(map)
+    }
+
+    /// Because sqlite does not support the `NUMERIC` type, `similarity` is cast
+    /// to integer before insertion into db.
+    pub async fn store_artist_pair(
+        // name1: &str,
+        &self,
+        name2: &str,
+        similarity: f64,
+        pool: &Pool<Sqlite>,
+    ) -> anyhow::Result<()> {
+        let sim_int = (similarity * 100.0) as u32;
+        sqlx::query!(
+            r#"
             INSERT OR IGNORE INTO artist_pairs
             (
                 parent, -- parent_lower,
@@ -135,12 +139,13 @@ pub async fn store_artist_pair(
             )
             VALUES ($1, $2, $3)
         "#,
-        name1,
-        name2,
-        sim_int
-    )
-    .execute(pool)
-    .await
-    .unwrap();
-    Ok(())
+            self.root,
+            name2,
+            sim_int
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        Ok(())
+    }
 }

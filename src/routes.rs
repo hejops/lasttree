@@ -8,6 +8,7 @@ use maud::Markup;
 use serde::Deserialize;
 
 use crate::error_500;
+use crate::html;
 use crate::ArtistTree;
 use crate::SqPool;
 use crate::APP_NAME;
@@ -22,10 +23,10 @@ pub async fn not_found() -> impl Responder { redirect("/").await }
 
 #[get("/")]
 pub async fn home() -> actix_web::Result<Markup> {
-    // fill this up once several endpoints are "ready"
     let html = html! {
         h1 { (APP_NAME.to_string()) }
         ul {
+            // fill this up once several endpoints are "ready"
             li { a href=("/artists") { "Artists" } }
         }
     };
@@ -52,6 +53,7 @@ pub async fn search_artists() -> actix_web::Result<Markup> {
                 button type="submit" { "Search" }
             }
         }
+        button type="submit" { "Random" }
     };
     Ok(html)
 }
@@ -67,22 +69,30 @@ struct ArtistFormData {
 #[post("/artists")]
 pub async fn post_artists(form: web::Form<ArtistFormData>) -> impl Responder {
     let path = format!("/artists/{}", form.0.artist);
-    HttpResponse::SeeOther()
-        .insert_header(("Location", path))
-        .finish()
+    redirect(&path).await
 }
 
 #[get("/artists/{artist}")]
 pub async fn show_artist(
     // https://actix.rs/docs/url-dispatch/#scoping-routes
+    // TODO: capture url params? (e.g. /artists/foo?key=val)
     path: web::Path<String>,
     pool: web::Data<SqPool>,
 ) -> actix_web::Result<Markup> {
     let artist = path.into_inner();
 
-    let html = match ArtistTree::new(&artist, &pool).await {
-        Ok(tree) => tree.as_html().await.map_err(error_500)?,
-        Err(_) => html! {"TODO: home"},
+    let html = match ArtistTree::new(&artist).await {
+        Ok(tree) => tree
+            .build_graph(&pool)
+            .await
+            .map_err(error_500)?
+            .as_html()
+            .await
+            .map_err(error_500)?,
+        Err(_) => html! {
+            "Artist not found: "(artist)
+            p { (html::link("/", "Home")) }
+        },
     };
 
     Ok(html)

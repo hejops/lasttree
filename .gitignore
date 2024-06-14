@@ -1,5 +1,6 @@
 /target
-*html
+*.html
 *.db*
+*.pdf
 Cargo.lock
 .pre-commit-config.yaml

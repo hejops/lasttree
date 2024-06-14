@@ -23,14 +23,14 @@ use lazy_static::lazy_static;
 // https://users.rust-lang.org/t/principles-for-using-mod-vs-pub-mod/27814/2
 
 mod db;
-mod html;
+pub mod html;
 mod lastfm;
 pub mod routes;
 pub mod tests;
 mod tree;
 pub use db::*;
-pub use html::*;
-pub use lastfm::*;
+// pub use html::*;
+// pub use lastfm::*;
 pub use tree::*;
 
 lazy_static! {

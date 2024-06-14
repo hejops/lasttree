@@ -11,8 +11,6 @@ use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::NodeIndexable;
 
-use crate::get_canonical_name;
-use crate::get_similar_artists;
 use crate::SqPool;
 
 /// Convert arbitrary error types to `actix_web::Error` with HTTP 500
@@ -47,16 +45,14 @@ pub struct ArtistTree {
 
 impl ArtistTree {
     /// Defaults to `threshold` 0.7, `depth` 2
-    pub async fn new(
-        root: &str,
-        pool: &SqPool,
-    ) -> anyhow::Result<Self> {
+    pub async fn new(root: &str) -> anyhow::Result<Self> {
         let root = root.to_string();
         let nodes = IndexMap::new();
         let threshold = 0.7;
         let depth = 2;
 
-        let mut tree = Self {
+        // let mut tree = Self {
+        let tree = Self {
             root,
             nodes,
             threshold,
@@ -64,7 +60,7 @@ impl ArtistTree {
             graph: Graph::new(),
         };
 
-        tree.build_graph(pool).await?;
+        // tree.build_graph(pool).await?;
         Ok(tree)
     }
 
@@ -86,36 +82,36 @@ impl ArtistTree {
 
     /// `self.nodes` is only used to keep track of what has been added to the
     /// `Graph`. It is not otherwise used.
-    async fn build_graph(
-        &mut self,
+    ///
+    /// Note: `self.root` will be replaced with the canonical name.
+    pub async fn build_graph(
+        mut self,
         pool: &SqPool,
-    ) -> anyhow::Result<()> {
+        // ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Self> {
         for i in 0..=self.depth {
             let parents = match i {
                 0 => {
                     // we literally only do this in order to store the canonical name in the db and
                     // get it back; the map returned by the function doesn't actually contain it!
-                    get_similar_artists(&self.root, pool).await?;
-                    let root = get_canonical_name(&self.root, pool).await?.context("")?;
-                    self.root = root.clone(); // override with the canonical
-                                              // println!("{:#?}", self);
-                    [root].to_vec()
+                    self.get_similar_artists(pool).await?;
+                    let canon = self.canonical_name(pool).await?.context("")?;
+                    // println!("{:?}", canon);
+                    self.root = canon.clone(); // override with the canonical
+
+                    // println!("{:#?}", self);
+                    [canon].to_vec()
                 }
                 _ => self.nodes.clone().into_keys().collect(),
             };
 
             for parent in parents {
-                let map = get_similar_artists(&parent, pool).await?;
-
-                // println!("{}", parent);
-                // for (k, v) in map.iter().take(5) {
-                //     println!("{k} {v}");
-                // }
+                let map = ArtistTree::new(&parent)
+                    .await?
+                    .get_similar_artists(pool)
+                    .await?;
 
                 for (c, sim) in map.iter().filter(|x| *x.1 >= 70) {
-                    // if c.is_empty() {
-                    //     continue;
-                    // }
                     let n1 = match self.nodes.get(&parent) {
                         Some(node) => *node,
                         None => self.graph.add_node(parent.clone()),
@@ -139,7 +135,7 @@ impl ArtistTree {
         }
 
         // graph
-        Ok(())
+        Ok(self)
     }
 
     /// Uses `dot` layout by default
@@ -253,14 +249,19 @@ mod tests {
         expected_nodes: &[&str],
     ) {
         let pool = &init_test_db().await.pool;
-        let tree = ArtistTree::new(root, pool).await.unwrap();
+        let tree = ArtistTree::new(root)
+            .await
+            .unwrap()
+            .build_graph(pool)
+            .await
+            .unwrap();
 
         assert!(!tree.nodes.is_empty());
 
         let obtained_nodes: Vec<&str> = tree.nodes.keys().map(|s| s.as_str()).collect();
         // println!("nodes {:#?}", tree.nodes);
         // println!("nodes vec {:#?}", obtained_nodes);
-        assert_eq!(obtained_nodes, expected_nodes);
+        assert_eq!(obtained_nodes, expected_nodes, "nodes do not match");
 
         let html = tree.as_html().await.unwrap();
         assert_eq!(
@@ -282,7 +283,12 @@ mod tests {
     #[tokio::test]
     async fn child_similarity() {
         let pool = &init_test_db().await.pool;
-        let tree = ArtistTree::new("metallica", pool).await.unwrap();
+        let tree = ArtistTree::new("metallica")
+            .await
+            .unwrap()
+            .build_graph(pool)
+            .await
+            .unwrap();
         let sim = tree.get_child_similarity("Annihilator");
         assert_eq!(sim, 51);
     }
