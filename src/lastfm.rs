@@ -131,7 +131,7 @@ mod tests {
     use crate::tests::TestPool;
     use crate::ArtistTree;
 
-    async fn check_children(
+    async fn check_similars(
         parent: &str,
         children: &[&str],
     ) {
@@ -169,13 +169,13 @@ mod tests {
 
     #[tokio::test]
     async fn get_similar_artists() {
-        check_children(
+        check_similars(
             "loona",
             &["LOOΠΔ 1/3", "LOONA/yyxy", "LOOΠΔ / ODD EYE CIRCLE"],
         )
         .await;
 
-        check_children(
+        check_similars(
             "LOOΠΔ 1/3",
             // note: because "loona 1/3" is considered a different artist, it will produce
             // different children
@@ -183,7 +183,7 @@ mod tests {
         )
         .await;
 
-        check_children(
+        check_similars(
             "sadwrist",
             &[
                 "tsujiura",

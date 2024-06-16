@@ -6,26 +6,33 @@ use urlencoding::encode;
 use crate::ArtistTree;
 use crate::APP_NAME;
 
-// pub fn svg(
-//     artist: &str,
-//     raw_svg: &str,
-// ) -> Markup {
-//     // https://github.com/bigskysoftware/htmx/blob/master/README.md#quick-start
-//     // https://stackoverflow.com/a/77994867
-//
-//     // interestingly, maud will render htmx in a box, with monospace font.
-//     // potentially, this may be circumvented if css is applied?
-//     html! {
-//         script src="https://unpkg.com/htmx.org/dist/htmx.min.js" {}
-//
-//         button
-//             hx-post={"/artists/"(artist)"/svg"}
-//             name="svg"
-//             value=(raw_svg)
-//             hx-swap="/outerHTML"
-//             { "Show graph (SVG)" }
-//     }
-// }
+pub fn api_key_form(redirect_to: &str) -> Markup {
+    html! {
+        p {
+            "A Last.fm API key is required. "
+            "Click " (link("https://www.last.fm/api", "here")) " to get one."
+        }
+        form
+            method="POST"
+            action="/login"
+            {
+                label { "API key: "
+                    input
+                        type="password"
+                        name="key"
+                        { }
+                    button type="submit" { "Submit" }
+                }
+
+                input hidden
+                    type="text"
+                    name="redirect_to"
+                    value=(redirect_to) {}
+
+            }
+
+    }
+}
 
 // this could be an ArtistTree method, but only if this gets used a lot
 pub fn get_lastfm_url(name: &str) -> Markup {

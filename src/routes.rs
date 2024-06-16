@@ -9,10 +9,8 @@ use serde::Deserialize;
 
 use crate::error_500;
 use crate::get_api_key;
-use crate::html;
-use crate::html::link;
-use crate::init_db;
-// should not conflict with maud::html
+use crate::html; // should not conflict with maud::html
+use crate::store_api_key;
 use crate::ArtistTree;
 use crate::SqPool;
 use crate::APP_NAME;
@@ -37,33 +35,32 @@ async fn home() -> actix_web::Result<Markup> {
     Ok(html)
 }
 
+#[derive(Deserialize)]
+struct ApiKeyFormData {
+    key: String,
+    redirect_to: String,
+}
+
+#[post("/login")]
+async fn login(
+    form: web::Form<ApiKeyFormData>,
+    pool: web::Data<SqPool>,
+) -> impl Responder {
+    store_api_key(&form.0.key, &pool).await.unwrap();
+    redirect(&form.0.redirect_to).await
+}
+
 #[get("/artists")]
 pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup> {
     // TODO: button for random artist (htmx?)
     // https://github.com/sekunho/emojied/blob/8b08f35ab237eb1d2417e68f92f0337fc7868c1b/src/views/url.rs#L54
 
     let key = get_api_key(&pool).await.map_err(error_500)?;
+
     let html = html! {
-
-        (link("/", "Home"))
-
+        (html::link("/", "Home")) // TODO: header
         @if key.is_none() {
-            p {
-                "A Last.fm API key is required. "
-                "Click " (link("https://www.last.fm/api", "here")) " to get one."
-            }
-            form
-                method="POST"
-                action="/login"
-                {
-                    label { "API key: "
-                        input
-                            type="text"
-                            name="key"
-                            { }
-                    button type="submit" { "Submit" }
-                }
-            }
+            (html::api_key_form("/artists"))
         } @else {
             form
                 method="POST"

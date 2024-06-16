@@ -167,6 +167,7 @@ pub async fn store_api_key(
     key: &str,
     pool: &Pool<Sqlite>,
 ) -> anyhow::Result<()> {
+    let key = key.trim();
     sqlx::query!(
         r#"
         INSERT INTO api_key
