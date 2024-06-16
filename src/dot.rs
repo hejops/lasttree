@@ -71,7 +71,7 @@ mod tests {
     use crate::ArtistTree;
 
     #[tokio::test]
-    async fn simple() {
+    async fn basic_styling() {
         // TODO: remove network requirement
         let pool = &TestPool::new().await.with_key().await.pool;
         let a = ArtistTree::new("loona")

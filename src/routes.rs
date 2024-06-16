@@ -8,7 +8,11 @@ use maud::Markup;
 use serde::Deserialize;
 
 use crate::error_500;
-use crate::html; // should not conflict with maud::html
+use crate::get_api_key;
+use crate::html;
+use crate::html::link;
+use crate::init_db;
+// should not conflict with maud::html
 use crate::ArtistTree;
 use crate::SqPool;
 use crate::APP_NAME;
@@ -34,29 +38,53 @@ async fn home() -> actix_web::Result<Markup> {
 }
 
 #[get("/artists")]
-pub async fn search_artists() -> actix_web::Result<Markup> {
+pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup> {
     // TODO: button for random artist (htmx?)
     // https://github.com/sekunho/emojied/blob/8b08f35ab237eb1d2417e68f92f0337fc7868c1b/src/views/url.rs#L54
+
+    let key = get_api_key(&pool).await.map_err(error_500)?;
     let html = html! {
-        a href=("/") { "Home" }
-        form
-            method="POST"
-            action="/artists"
-            {
-                label { "Search artist: "
-                    input
-                        type="text"
-                        value="metallica"
-                        autofocus="true"
-                        name="artist" // `name` must correspond to a `Form` field
-                        { }
-                button type="submit" { "Search" }
+
+        (link("/", "Home"))
+
+        @if key.is_none() {
+            p {
+                "A Last.fm API key is required. "
+                "Click " (link("https://www.last.fm/api", "here")) " to get one."
+            }
+            form
+                method="POST"
+                action="/login"
+                {
+                    label { "API key: "
+                        input
+                            type="text"
+                            name="key"
+                            { }
+                    button type="submit" { "Submit" }
+                }
+            }
+        } @else {
+            form
+                method="POST"
+                action="/artists"
+                {
+                    label { "Search artist: "
+                        input
+                            type="text"
+                            value="metallica"
+                            autofocus="true"
+                            name="artist" // `name` must correspond to a `Form` field
+                            { }
+                    button type="submit" { "Search" }
+                }
             }
         }
         // button type="submit" { "Random" }
         // (PreEscaped(html::toggle()))
         // (svg())
     };
+
     Ok(html)
 }
 

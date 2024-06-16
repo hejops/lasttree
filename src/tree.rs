@@ -224,7 +224,7 @@ mod tests {
 
         assert_eq!(
             html.matches(r#"xlink:href="/artists/"#).count(),
-            // graph links are "a xlink:href", not "a href"
+            // svg links are "a xlink:href", not "a href"
             expected_nodes.len(),
             "{root}"
         );

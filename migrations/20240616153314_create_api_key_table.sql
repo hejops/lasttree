@@ -4,4 +4,3 @@ CREATE TABLE IF NOT EXISTS api_key(
 	key TEXT NOT NULL UNIQUE,
 	PRIMARY KEY (key)
 );
-
