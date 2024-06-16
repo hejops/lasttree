@@ -1,5 +1,7 @@
 # lasttree
 
+![example tree](./example.png)
+
 ## Motivation
 
 - Last.fm has a decent [API](https://www.last.fm/api/show/artist.getSimilar)
