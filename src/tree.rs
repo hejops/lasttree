@@ -1,12 +1,9 @@
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::process::Command;
-use std::process::Stdio;
 
 use anyhow::Context;
 use indexmap::IndexMap;
 use petgraph::algo::astar;
-use petgraph::dot::Dot;
 use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::NodeIndexable;
@@ -40,7 +37,7 @@ pub struct ArtistTree {
     /// Default: 2
     depth: u8,
 
-    graph: Graph<String, i64>,
+    pub graph: Graph<String, i64>,
 }
 
 impl ArtistTree {
@@ -84,7 +81,7 @@ impl ArtistTree {
     /// `Graph`. It is not otherwise used.
     ///
     /// Note: `self.root` will be replaced with the canonical name.
-    pub async fn build_graph(
+    pub async fn build_tree(
         mut self,
         pool: &SqPool,
         // ) -> anyhow::Result<()> {
@@ -139,48 +136,54 @@ impl ArtistTree {
     }
 
     /// Uses `dot` layout by default
-    pub async fn as_dot(
-        &self,
-        fmt: DotOutput,
-    ) -> anyhow::Result<String> {
-        // echo {out} | <fdp|dot> -Tsvg | display
-
-        // println!("starting dot {:#?}", self.graph);
-        let dot = Dot::new(&self.graph);
-        let ext = match fmt {
-            DotOutput::Png => "png",
-            DotOutput::Svg => "svg",
-        };
-
-        // afaik, there is no rust crate for dot -> svg conversion
-
-        // let out = format!("{}.{}", self.root, ext);
-
-        let echo = Command::new("echo")
-            .arg(dot.to_string())
-            .stdout(Stdio::piped())
-            .spawn()?;
-        let _fdp = Command::new("dot")
-            .args(["-T", ext])
-            .stdin(Stdio::from(echo.stdout.unwrap()))
-            // .stdout(Stdio::piped())
-            // .args(["-o", &out])
-            .output()?
-            .stdout;
-
-        // https://stackoverflow.com/a/42993724
-        Ok(String::from_utf8_lossy(&_fdp).to_string())
-
-        // Ok(_fdp)
-
-        // Command::new("display")
-        //     // .stdin(Stdio::from(fdp.stdout.unwrap()))
-        //     .arg(out)
-        //     .spawn()?
-        //     .wait()?;
-
-        // Ok(())
-    }
+    // pub async fn as_dot(
+    //     &self,
+    //     fmt: DotOutput,
+    // ) -> anyhow::Result<String> {
+    //     // echo {out} | <fdp|dot> -Tsvg | display
+    //
+    //     // println!("starting dot {:#?}", self.graph);
+    //     // TODO: dark mode?
+    //     let dot = Dot::new(&self.graph);
+    //     // println!("{}", dot.to_string());
+    //     let mut lines: Vec<String> = dot.to_string().lines().map(|s|
+    // s.to_string()).collect();     lines.insert(1, r#"    node
+    // [colorscheme="pastel18"];"#.to_string());     println!("{}",
+    // lines.join("\n"));     // panic!();
+    //     let ext = match fmt {
+    //         DotOutput::Png => "png",
+    //         DotOutput::Svg => "svg",
+    //     };
+    //
+    //     // afaik, there is no rust crate for dot -> svg conversion
+    //
+    //     // let out = format!("{}.{}", self.root, ext);
+    //
+    //     let echo = Command::new("echo")
+    //         .arg(dot.to_string())
+    //         .stdout(Stdio::piped())
+    //         .spawn()?;
+    //     let _fdp = Command::new("dot")
+    //         .args(["-T", ext])
+    //         .stdin(Stdio::from(echo.stdout.unwrap()))
+    //         // .stdout(Stdio::piped())
+    //         // .args(["-o", &out])
+    //         .output()?
+    //         .stdout;
+    //
+    //     // https://stackoverflow.com/a/42993724
+    //     Ok(String::from_utf8_lossy(&_fdp).to_string())
+    //
+    //     // Ok(_fdp)
+    //
+    //     // Command::new("display")
+    //     //     // .stdin(Stdio::from(fdp.stdout.unwrap()))
+    //     //     .arg(out)
+    //     //     .spawn()?
+    //     //     .wait()?;
+    //
+    //     // Ok(())
+    // }
 
     fn get_node_index(
         &self,
@@ -229,10 +232,10 @@ impl ArtistTree {
     }
 }
 
-pub enum DotOutput {
-    Png,
-    Svg,
-}
+// pub enum DotOutput {
+//     Png,
+//     Svg,
+// }
 
 #[cfg(test)]
 mod tests {
@@ -252,7 +255,7 @@ mod tests {
         let tree = ArtistTree::new(root)
             .await
             .unwrap()
-            .build_graph(pool)
+            .build_tree(pool)
             .await
             .unwrap();
 
@@ -292,7 +295,7 @@ mod tests {
         let tree = ArtistTree::new("metallica")
             .await
             .unwrap()
-            .build_graph(pool)
+            .build_tree(pool)
             .await
             .unwrap();
         let sim = tree.get_child_similarity("Annihilator");

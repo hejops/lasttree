@@ -2,5 +2,7 @@
 *.html
 *.db*
 *.pdf
+*.dot
+*.svg
 Cargo.lock
 .pre-commit-config.yaml

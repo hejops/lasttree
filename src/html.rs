@@ -1,13 +1,9 @@
-use itertools::Itertools;
 use maud::html;
 use maud::Markup;
 use maud::PreEscaped;
-use scraper::Html;
-use scraper::Selector;
 use urlencoding::encode;
 
 use crate::ArtistTree;
-use crate::DotOutput;
 use crate::APP_NAME;
 
 // pub fn svg(
@@ -62,13 +58,17 @@ pub fn list_item(s: &str) -> Markup {
 
 impl ArtistTree {
     pub async fn as_html(&self) -> anyhow::Result<Markup> {
-        let raw_svg = self
-            .as_dot(DotOutput::Svg)
-            .await?
-            .lines()
-            .skip(3)
-            .map(linkify_svg)
-            .join("\n");
+        // TODO: extract youtube audio link (yt-dlp), then embed
+        // but this is useless unless i can customise it to show only the
+        // button/progress
+        // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio
+
+        //       // https://developers.google.com/youtube/player_parameters
+        //       let player = r#"<iframe id="ytplayer" type="text/html" width="50"
+        // height="50" src="https://www.youtube.com/embed/M7lc1UVf-VE?autoplay=0&origin=http://example.com"
+        // frameborder="0"></iframe>"#;
+
+        let player = "";
 
         // row order must be independent of graph node order
         // TODO: sort table (frontend)
@@ -85,7 +85,9 @@ impl ArtistTree {
                     "table, th, td { border: 1px solid grey; }"
                 }
                 title { (APP_NAME.to_string())": "(self.root) }
-                a href=("/") { "Home" }
+                // a href=("/") { "Home" }
+                (link("/", "Home"))
+                (PreEscaped(player))
                 body {
                     // h1 { (self.root) }
                     h1 { (get_lastfm_url(&self.root)) }
@@ -93,7 +95,7 @@ impl ArtistTree {
                     details open {
                         summary { "Graph" }
                         // (PreEscaped(raw_svg))
-                        (PreEscaped(linkify_svg(&raw_svg)))
+                        (PreEscaped(&self.as_svg()))
                     }
                 }
                 table {
@@ -113,36 +115,6 @@ impl ArtistTree {
 
         Ok(html)
     }
-}
-
-pub fn linkify_svg(svg: &str) -> String {
-    let mut new: Vec<String> = vec![];
-    for line in svg.lines() {
-        // if !s.contains(r#"text-anchor="middle""#) {
-        //     return s.to_string();
-        // }
-
-        if !new.is_empty() && new.last().unwrap().contains("ellipse")
-        // if let Some(last) = new.last()
-        //     && last.contains("ellipse")
-        {
-            let parsed = Html::parse_fragment(line);
-            let selector = Selector::parse("text").unwrap();
-            let elem = parsed.select(&selector).next().unwrap();
-            // println!("{:#?}", elem.parent().unwrap().tree());
-            // panic!();
-            let name = elem.text().collect::<String>();
-            // println!("{:#?}", name);
-            // https://stackoverflow.com/a/70881425
-            // https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/xlink:href
-            let n = format!(r#"<a href="/artists/{name}">{line}</a>"#);
-            new.push(n);
-        } else {
-            new.push(line.to_string());
-        }
-    }
-
-    new.join("\n")
 }
 
 #[cfg(test)]

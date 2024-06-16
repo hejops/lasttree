@@ -85,7 +85,7 @@ async fn show_artist(
 
     let html = match ArtistTree::new(&artist).await {
         Ok(tree) => tree
-            .build_graph(&pool)
+            .build_tree(&pool)
             .await
             .map_err(error_500)?
             .as_html()

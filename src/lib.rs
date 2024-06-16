@@ -19,6 +19,7 @@
 // https://users.rust-lang.org/t/principles-for-using-mod-vs-pub-mod/27814/2
 
 mod db;
+pub mod dot;
 pub mod html;
 mod lastfm;
 pub mod routes;
@@ -30,6 +31,8 @@ pub use db::*;
 pub use tree::*;
 
 lazy_static::lazy_static! {
+    // TODO: test invalid key
+    // TODO: ask for key, store in db
     static ref LASTFM_KEY: String =
         std::env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
     static ref APP_NAME: String = "Last".to_string();
