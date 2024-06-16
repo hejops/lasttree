@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use crate::error_500;
 use crate::get_api_key;
+use crate::get_top_genres;
 use crate::html; // should not conflict with maud::html
 use crate::store_api_key;
 use crate::ArtistTree;
@@ -29,7 +30,8 @@ async fn home() -> actix_web::Result<Markup> {
         h1 { (APP_NAME.to_string()) }
         ul {
             // fill this up once several endpoints are "ready"
-            li { a href=("/artists") { "Artists" } }
+            li { (html::link("/artists", "Artists")) }
+            li { (html::link("/genres", "Genres")) }
         }
     };
     Ok(html)
@@ -125,37 +127,12 @@ async fn show_artist(
     Ok(html)
 }
 
-// #[derive(Deserialize)]
-// struct ArtistTreeData {
-//     svg: String,
-// }
-//
-// #[post("/artists/{artist}/svg")]
-// async fn post_artists_svg(form: web::Form<ArtistTreeData>) -> impl Responder
-// {     println!("received POST /artists/X/svg");
-//     assert!(form.0.svg.ends_with("</svg>"));
-//     let path = format!("/svg/{}", BASE64.encode(form.0.svg));
-//     redirect(&path).await
-// }
-//
-// // TODO: should probably be scoped?
-// // TODO: redirect to / on decode failure
-// #[get("/svg/{svg}")]
-// async fn show_artist_svg(path: web::Path<String>) ->
-// actix_web::Result<HttpResponse> {     let b64 = path.into_inner();
-//     // let byt = match BASE64.decode(b64) {
-//     //     Ok(b) => b,
-//     //     Err(_) => return redirect("/").await,
-//     // };
-//     let byt = BASE64.decode(b64).map_err(error_500)?;
-//     let svg = std::str::from_utf8(&byt)?.to_string();
-//     assert!(svg.ends_with("</svg>"));
-//
-//     // Ok(html! { (PreEscaped(svg))})
-//     Ok(HttpResponse::Ok()
-//         .content_type(ContentType::html())
-//         .body(svg))
-// }
+#[get("/genres")]
+async fn genres() -> actix_web::Result<Markup> {
+    get_top_genres().await;
+    let html = html! {};
+    Ok(html)
+}
 
 #[cfg(test)]
 mod tests {

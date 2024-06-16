@@ -20,12 +20,14 @@
 
 mod db;
 pub mod dot;
+mod genres;
 pub mod html;
 mod lastfm;
 pub mod routes;
 pub mod tests;
 mod tree;
 pub use db::*;
+pub use genres::*;
 // pub use html::*;
 // pub use lastfm::*;
 pub use tree::*;
