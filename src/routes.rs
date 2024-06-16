@@ -16,6 +16,9 @@ use crate::ArtistTree;
 use crate::SqPool;
 use crate::APP_NAME;
 
+// as far as possible, this file should not contain overly complicated markup;
+// simple markup is still ok for locality of behaviour
+
 async fn redirect(path: &str) -> impl Responder {
     HttpResponse::SeeOther()
         .insert_header(("Location", path))
@@ -28,12 +31,13 @@ pub async fn not_found() -> impl Responder { redirect("/").await }
 async fn home() -> actix_web::Result<Markup> {
     let html = html! {
         h1 { (APP_NAME.to_string()) }
+        h2 { "Home" }
         ul {
-            // fill this up once several endpoints are "ready"
             li { (html::link("/artists", "Artists")) }
             li { (html::link("/genres", "Genres")) }
         }
     };
+    // https://www.last.fm/api/show/library.getArtists
     Ok(html)
 }
 
@@ -60,7 +64,8 @@ pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup
     let key = get_api_key(&pool).await.map_err(error_500)?;
 
     let html = html! {
-        (html::link("/", "Home")) // TODO: header
+        (html::header())
+        h2 { "Artists" }
         @if key.is_none() {
             (html::api_key_form("/artists"))
         } @else {
@@ -129,8 +134,18 @@ async fn show_artist(
 
 #[get("/genres")]
 async fn genres() -> actix_web::Result<Markup> {
-    get_top_genres().await;
-    let html = html! {};
+    // arguably, we don't need to cache this
+    let genres = get_top_genres().await.map_err(error_500)?;
+    let html = html! {
+        (html::header())
+        h2 { "Genres" }
+        @for g in genres.0.iter() {
+            (html::list_item(&html::link(&g.url, &g.name.to_lowercase()).into_string()))
+        }
+    // TODO: hx-swap afterend? this requires us to keep track of what page we are on
+    // https://htmx.org/attributes/hx-swap/
+    // TODO: https://www.last.fm/api/show/tag.getTopArtists
+    };
     Ok(html)
 }
 

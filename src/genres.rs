@@ -1,16 +1,34 @@
+use std::fmt::Display;
+
 use anyhow::Context;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::LASTFM_KEY;
 
+/// Wrapper for `Vec<Genre>`, solely for better error-handling
+pub struct Genres(pub Vec<Genre>);
+
+// required for error_500
+impl Display for Genres {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        for g in self.0.iter() {
+            writeln!(f, "{:?}", g)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Genre {
-    name: String,
+    pub name: String,
+    pub taggings: String,
+    pub url: String,
     // reach: String,
     // streamable: String,
-    taggings: String,
-    url: String,
 }
 
 pub async fn get_json(url: &str) -> anyhow::Result<Value> {
@@ -18,7 +36,8 @@ pub async fn get_json(url: &str) -> anyhow::Result<Value> {
     Ok(serde_json::from_str::<Value>(&resp)?)
 }
 
-pub async fn get_top_genres() -> anyhow::Result<Vec<Genre>> {
+pub async fn get_top_genres() -> anyhow::Result<Genres> {
+    // https://www.last.fm/api/show/chart.getTopTags
     let url = format!(
         "https://ws.audioscrobbler.com/2.0/?method=chart.gettoptags&api_key={}&format=json",//&limit=3",
         *LASTFM_KEY
@@ -34,7 +53,8 @@ pub async fn get_top_genres() -> anyhow::Result<Vec<Genre>> {
 
     // println!("{:#?}", genres);
 
-    Ok(genres.to_vec())
+    // Ok(genres.to_vec())
+    Ok(Genres(genres.to_vec()))
 }
 
 #[cfg(test)]
@@ -44,6 +64,6 @@ mod tests {
     #[tokio::test]
     async fn test_get_top_genres() {
         let g = get_top_genres().await.unwrap();
-        assert_eq!(g.len(), 50);
+        assert_eq!(g.0.len(), 50);
     }
 }

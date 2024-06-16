@@ -10,7 +10,8 @@ use petgraph::visit::NodeIndexable;
 
 use crate::SqPool;
 
-/// Convert arbitrary error types to `actix_web::Error` with HTTP 500
+/// Convert arbitrary error types to `actix_web::Error` with HTTP 500. Note
+/// that, as the type signature suggests, `T` must implement `Display`.
 pub fn error_500<T>(e: T) -> actix_web::Error
 where
     T: Debug + Display + 'static,

@@ -7,6 +7,7 @@ use crate::ArtistTree;
 use crate::APP_NAME;
 
 pub fn api_key_form(redirect_to: &str) -> Markup {
+    //{{{
     html! {
         p {
             "A Last.fm API key is required. "
@@ -32,7 +33,7 @@ pub fn api_key_form(redirect_to: &str) -> Markup {
             }
 
     }
-}
+} //}}}
 
 // this could be an ArtistTree method, but only if this gets used a lot
 pub fn get_lastfm_url(name: &str) -> Markup {
@@ -47,6 +48,12 @@ pub fn link(
     label: &str,
 ) -> Markup {
     html! { a href=(path) { (label) } }
+}
+
+pub fn header() -> Markup {
+    html! {
+        (link("/", "Home"))
+    }
 }
 
 pub fn table_row(s: &str) -> Markup {
@@ -100,7 +107,7 @@ impl ArtistTree {
                     h1 { (get_lastfm_url(&self.root)) }
                     // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details
                     details open {
-                        summary { "Graph" }
+                        summary { "Tree" }
                         // (PreEscaped(raw_svg))
                         (PreEscaped(&self.as_svg()))
                     }
