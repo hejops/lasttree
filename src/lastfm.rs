@@ -12,7 +12,7 @@ use serde::Deserializer;
 use serde_json::Value;
 use urlencoding::encode;
 
-use super::LASTFM_KEY;
+use crate::get_api_key;
 use crate::ArtistTree;
 use crate::SqPool;
 
@@ -61,6 +61,8 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
 }
 
 impl ArtistTree {
+    /// Important: a Last.fm API key is required
+    ///
     /// Fetches from db if `artist` has been cached in the `artists` table.
     /// Otherwise, a network request to last.fm is made, and the request is
     /// processed and cached so it can be skipped the next time.
@@ -80,10 +82,13 @@ impl ArtistTree {
             return Ok(cached);
         }
 
+        let key = get_api_key(pool).await?.context("no api key found")?;
+
         let url = format!(
             "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json",
             encode(&self.root),
-            *LASTFM_KEY
+            // *LASTFM_KEY
+            key,
     );
 
         // String -> Value -> struct
@@ -122,14 +127,15 @@ impl ArtistTree {
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::init_test_db;
+    use crate::get_api_key;
+    use crate::tests::TestPool;
     use crate::ArtistTree;
 
-    async fn helper(
+    async fn check_children(
         parent: &str,
         children: &[&str],
     ) {
-        let pool = &init_test_db().await.pool;
+        let pool = &TestPool::new().await.with_key().await.pool;
         let mut artist = ArtistTree::new(parent).await.unwrap();
 
         let retrieved = artist.get_similar_artists(pool).await.unwrap();
@@ -149,14 +155,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn no_key() {
+        let pool = &TestPool::new().await.pool;
+        let mut artist = ArtistTree::new("loona").await.unwrap();
+
+        assert!(get_api_key(pool).await.unwrap().is_none());
+
+        let retrieved = artist.get_similar_artists(pool).await;
+        // println!("{:?}", retrieved);
+        assert!(retrieved.is_err());
+        // panic!();
+    }
+
+    #[tokio::test]
     async fn get_similar_artists() {
-        helper(
+        check_children(
             "loona",
             &["LOOΠΔ 1/3", "LOONA/yyxy", "LOOΠΔ / ODD EYE CIRCLE"],
         )
         .await;
 
-        helper(
+        check_children(
             "LOOΠΔ 1/3",
             // note: because "loona 1/3" is considered a different artist, it will produce
             // different children
@@ -164,7 +183,7 @@ mod tests {
         )
         .await;
 
-        helper(
+        check_children(
             "sadwrist",
             &[
                 "tsujiura",
@@ -178,7 +197,7 @@ mod tests {
 
     #[tokio::test]
     async fn cached_result() {
-        let pool = &init_test_db().await.pool;
+        let pool = &TestPool::new().await.with_key().await.pool;
 
         let mut artist = ArtistTree::new("loona").await.unwrap();
 

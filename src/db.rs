@@ -32,6 +32,7 @@ pub struct ArtistPair {
 }
 
 impl ArtistTree {
+    //{{{
     /// Query `artists` table (which is much faster than `artist_pairs`)
     pub async fn canonical_name(
         &self,
@@ -147,4 +148,34 @@ impl ArtistTree {
         .unwrap();
         Ok(())
     }
+} //}}}
+
+pub async fn get_api_key(pool: &Pool<Sqlite>) -> anyhow::Result<Option<String>> {
+    let row = sqlx::query!(
+        r#"
+        SELECT key FROM api_key
+        LIMIT 1
+        "#,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| r.key))
+}
+
+pub async fn store_api_key(
+    key: &str,
+    pool: &Pool<Sqlite>,
+) -> anyhow::Result<()> {
+    sqlx::query!(
+        r#"
+        INSERT INTO api_key
+        VALUES ($1)
+        "#,
+        key
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }

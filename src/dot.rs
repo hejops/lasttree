@@ -67,12 +67,13 @@ mod tests {
     use graphviz_rust::printer::DotPrinter;
     use graphviz_rust::printer::PrinterContext;
 
-    use crate::tests::init_test_db;
+    use crate::tests::TestPool;
     use crate::ArtistTree;
 
     #[tokio::test]
     async fn simple() {
-        let pool = &init_test_db().await.pool;
+        // TODO: remove network requirement
+        let pool = &TestPool::new().await.with_key().await.pool;
         let a = ArtistTree::new("loona")
             .await
             .unwrap()
@@ -81,10 +82,14 @@ mod tests {
             .unwrap();
 
         let dot = a.as_dot().print(&mut PrinterContext::default());
+        println!("{:?}", dot);
         assert_eq!(
             dot,
             "\
 digraph  {
+  bgcolor=transparent
+  node[colorscheme=set36,style=filled]
+  edge[color=grey75,fontcolor=grey75]
   0[label=\"Loona\",URL=\"/artists/Loona\"]
   1[label=\"LOOΠΔ 1/3\",URL=\"/artists/LOOΠΔ 1/3\"]
   2[label=\"LOONA/yyxy\",URL=\"/artists/LOONA/yyxy\"]
