@@ -1,6 +1,9 @@
+use graphviz_rust::attributes::color_name;
 use graphviz_rust::attributes::EdgeAttributes;
+use graphviz_rust::attributes::GraphAttributes;
 use graphviz_rust::attributes::NodeAttributes;
 use graphviz_rust::dot_generator::*;
+use graphviz_rust::dot_structures::GraphAttributes as GA;
 use graphviz_rust::dot_structures::*;
 use graphviz_rust::exec_dot;
 use graphviz_rust::printer::DotPrinter;
@@ -15,16 +18,28 @@ fn quote(s: &str) -> String { format!("{:?}", s) }
 impl ArtistTree {
     // https://github.com/egraphs-good/egraph-serialize/blob/5838c036623e91540831745b1574539e01c8cb23/src/graphviz.rs#L36
     pub fn as_dot(&self) -> graphviz_rust::dot_structures::Graph {
-        let mut g = graph!(di id!(), vec![]);
+        let mut stmts = vec![
+            stmt!(GraphAttributes::bgcolor(color_name::transparent)),
+            // confusingly, there is a separate GraphAttributes enum in dot_structures
+            stmt!(GA::Node(vec![
+                NodeAttributes::colorscheme("set36".to_owned()),
+                NodeAttributes::style("filled".to_owned()),
+            ])),
+            stmt!(GA::Edge(vec![
+                EdgeAttributes::color(color_name::grey75),
+                EdgeAttributes::fontcolor(color_name::grey75),
+                // EdgeAttributes::style("bold".to_owned()),
+            ])),
+        ];
 
         for n in self.graph.node_references() {
-            let url = format!("/artists/{}", n.1); // encode?
+            let url = format!("/artists/{}", n.1); // no need to encode
             let node = node!(
                 n.0.index();
                 NodeAttributes::label(quote(n.1)),
                 NodeAttributes::URL(quote(&url))
             );
-            g.add_stmt(stmt!(node));
+            stmts.push(stmt!(node));
         }
 
         for e in self.graph.edge_references() {
@@ -33,10 +48,10 @@ impl ArtistTree {
             let edge = edge!(node_id!(src) => node_id!(trg);
                 EdgeAttributes::label(quote(&e.weight().to_string()))
             );
-            g.add_stmt(stmt!(edge));
+            stmts.push(stmt!(edge));
         }
 
-        g
+        graph!(di id!(), stmts)
     }
 
     pub fn as_svg(&self) -> String {
