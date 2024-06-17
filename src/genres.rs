@@ -1,12 +1,12 @@
 use std::fmt::Display;
 
-use anyhow::Context;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::LASTFM_KEY;
 
 /// Wrapper for `Vec<Genre>`, solely for better error-handling
+#[derive(Deserialize)]
 pub struct Genres(pub Vec<Genre>);
 
 // required for error_500
@@ -22,7 +22,7 @@ impl Display for Genres {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Genre {
     pub name: String,
     pub taggings: String,
@@ -44,17 +44,9 @@ pub async fn get_top_genres() -> anyhow::Result<Genres> {
     );
     let json = get_json(&url).await.unwrap();
 
-    let genres: &Vec<Genre> = &json["tags"]["tag"]
-        .as_array()
-        .context("could not deserialize `tag` array")?
-        .iter()
-        .map(|g| serde_json::from_value::<Genre>(g.clone()).unwrap())
-        .collect();
+    let genres = serde_json::from_value(json["tags"]["tag"].clone())?;
 
-    // println!("{:#?}", genres);
-
-    // Ok(genres.to_vec())
-    Ok(Genres(genres.to_vec()))
+    Ok(genres)
 }
 
 #[cfg(test)]
