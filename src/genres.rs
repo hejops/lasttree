@@ -49,6 +49,18 @@ pub async fn get_top_genres() -> anyhow::Result<Genres> {
     Ok(genres)
 }
 
+pub async fn get_genre() {
+    let url = format!(
+        "https://ws.audioscrobbler.com/2.0/?method=tag.gettopartists&api_key={}&format=json",//&limit=3",
+        *LASTFM_KEY
+    );
+    let json = get_json(&url).await.unwrap();
+    println!("{:?}", json);
+
+    // let genres = serde_json::from_value(json["tags"]["tag"].clone())?;
+    // Ok(genres)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::get_top_genres;

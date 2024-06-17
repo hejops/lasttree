@@ -23,6 +23,7 @@ mod db;
 pub mod dot;
 mod genres;
 pub mod html;
+mod player;
 pub mod routes;
 pub mod tests;
 mod tree;

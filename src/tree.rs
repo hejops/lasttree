@@ -187,6 +187,7 @@ impl ArtistTree {
 mod tests {
 
     use super::ArtistTree;
+    use crate::tests::init_test_artist;
     use crate::tests::TestPool;
     use crate::LASTFM_KEY;
 
@@ -198,13 +199,7 @@ mod tests {
         root: &str,
         expected_nodes: &[&str],
     ) {
-        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let tree = ArtistTree::new(root)
-            .await
-            .unwrap()
-            .build_tree(pool)
-            .await
-            .unwrap();
+        let tree = init_test_artist(root, Some(&LASTFM_KEY)).await;
 
         assert!(!tree.nodes.is_empty());
 

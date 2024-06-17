@@ -130,11 +130,17 @@ async fn show_artist(
         Err(_) => html! {
             "Artist not found: "(artist)
             p { (html::link("/", "Home")) }
+        // TODO: redirect to artist search
+        // https://www.last.fm/api/show/artist.search
         },
     };
 
     Ok(html)
 }
+
+// https://www.last.fm/api/show/geo.getTopArtists
+// https://www.last.fm/api/show/library.getArtists
+// https://www.last.fm/api/show/user.getTopArtists
 
 #[get("/genres")]
 async fn genres() -> actix_web::Result<Markup> {
@@ -153,6 +159,25 @@ async fn genres() -> actix_web::Result<Markup> {
     Ok(html)
 }
 
+#[get("/genres/{genre}")]
+async fn show_genre(
+    path: web::Path<String>,
+    pool: web::Data<SqPool>,
+) -> actix_web::Result<Markup> {
+    let genre = path.into_inner();
+
+    // let html = match ArtistTree::new(&artist).await {
+    //     Ok(tree) => tree,
+    //     Err(_) => html! {
+    //         "Genre not found: "(genre)
+    //         p { (html::link("/", "Home")) }
+    //     },
+    // };
+
+    let html = html! {};
+
+    Ok(html)
+}
 #[cfg(test)]
 mod tests {
     use wiremock::matchers::method;
@@ -162,7 +187,7 @@ mod tests {
     use wiremock::ResponseTemplate;
 
     #[tokio::test]
-    async fn get_artist() {
+    async fn show_artist() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))

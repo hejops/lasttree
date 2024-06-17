@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::init_db;
 use crate::store_api_key;
+use crate::ArtistTree;
 use crate::SqPool;
 
 pub struct TestPool {
@@ -38,4 +39,17 @@ impl TestPool {
 
         TestPool { pool, path }
     }
+}
+
+pub async fn init_test_artist(
+    name: &str,
+    key: Option<&str>,
+) -> ArtistTree {
+    let pool = &TestPool::new(key).await.pool;
+    ArtistTree::new(name)
+        .await
+        .unwrap()
+        .build_tree(pool)
+        .await
+        .unwrap()
 }

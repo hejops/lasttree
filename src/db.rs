@@ -169,6 +169,7 @@ pub async fn store_api_key(
 ) -> anyhow::Result<()> {
     let key = key.trim();
 
+    // TODO: is there a better dummy request?
     let url = format!(
         "https://ws.audioscrobbler.com/2.0/?method=chart.gettoptags&api_key={}&format=json&limit=1",
         key

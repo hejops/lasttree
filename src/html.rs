@@ -3,6 +3,8 @@ use maud::Markup;
 use maud::PreEscaped;
 use urlencoding::encode;
 
+use crate::player::get_youtube_audio_link;
+use crate::player::search_youtube;
 use crate::ArtistTree;
 use crate::APP_NAME;
 
@@ -71,17 +73,20 @@ pub fn list_item(s: &str) -> Markup {
 
 impl ArtistTree {
     pub async fn as_html(&self) -> anyhow::Result<Markup> {
-        // TODO: extract youtube audio link (yt-dlp), then embed
-        // but this is useless unless i can customise it to show only the
-        // button/progress
+        // yt embed would be the simplest option, but it is not very useful, unless i
+        // can customise it to show only the button/progress (which was possible
+        // way back in like 2009)
+        // https://developers.google.com/youtube/player_parameters
+
         // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio
 
-        //       // https://developers.google.com/youtube/player_parameters
-        //       let player = r#"<iframe id="ytplayer" type="text/html" width="50"
-        // height="50" src="https://www.youtube.com/embed/M7lc1UVf-VE?autoplay=0&origin=http://example.com"
-        // frameborder="0"></iframe>"#;
-
-        let player = "";
+        let player = html! {
+            // audio controls {
+            //     source src=(search_youtube(&self.root).await.unwrap()) {}
+            // }
+            button type="submit" { "Search" }
+            // htmx replace button
+        };
 
         // row order must be independent of graph node order
         // TODO: sort table (frontend)
@@ -92,15 +97,41 @@ impl ArtistTree {
             artists.sort()
         };
 
+        // TODO: right align Similarity values (but not header)
+        // https://stackoverflow.com/a/1332648
+
+        let table = html! {
+            table {
+                th { "Similarity" }
+                th { "Artist" }
+                th { "Links" }
+                // th { "YouTube" }
+                @for artist in artists {
+                    tr {
+                        td { (self.get_child_similarity(artist)) }
+                        td { (link(&format!("/artists/{}", encode(artist)), artist)) }
+                        td {
+                            (link(&format!("https://last.fm/music/{artist}"), "Last.fm" ))
+                            // button hx-get="/" hx-swap="outerHTML" { "Last.fm" }
+                            " "
+                            button hx-get="/" hx-swap="outerHTML" { "YouTube" }
+                        }
+                        // td { (player) }
+                    }
+                }
+            }
+        };
+
         let html = html! {
             html {
+                script src="https://unpkg.com/htmx.org@1.9.12" {}
                 style {
                     "table, th, td { border: 1px solid grey; }"
                 }
                 title { (APP_NAME.to_string())": "(self.root) }
                 // a href=("/") { "Home" }
                 (link("/", "Home"))
-                (PreEscaped(player))
+                // (player)
                 body {
                     // h1 { (self.root) }
                     h1 { (get_lastfm_url(&self.root)) }
@@ -110,18 +141,7 @@ impl ArtistTree {
                         // (PreEscaped(raw_svg))
                         (PreEscaped(&self.as_svg()))
                     }
-                }
-                table {
-                    th { "Similarity" }
-                    th { "Artist" }
-                    th { "Last.fm" }
-                    @for artist in artists {
-                        tr {
-                            td { (self.get_child_similarity(artist)) }
-                            td { (link(&format!("/artists/{}", encode(artist)), artist)) }
-                            td { (link(&format!("https://last.fm/music/{artist}"), "↪" )) }
-                        }
-                    }
+                    (table)
                 }
             }
         };
