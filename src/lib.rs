@@ -18,11 +18,11 @@
 //
 // https://users.rust-lang.org/t/principles-for-using-mod-vs-pub-mod/27814/2
 
+mod artists;
 mod db;
 pub mod dot;
 mod genres;
 pub mod html;
-mod lastfm;
 pub mod routes;
 pub mod tests;
 mod tree;
