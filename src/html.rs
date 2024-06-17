@@ -37,7 +37,6 @@ pub fn api_key_form(redirect_to: &str) -> Markup {
 
 // this could be an ArtistTree method, but only if this gets used a lot
 pub fn get_lastfm_url(name: &str) -> Markup {
-    // https://github.com/isgasho/lettre/blob/a0980d017b1257018446228162a8d17bff17798f/examples/maud_html.rs#L24
     html! {
         a href=(format!("https://last.fm/music/{name}")) { (name) }
     }
@@ -113,14 +112,14 @@ impl ArtistTree {
                     }
                 }
                 table {
-                    th { "Artist" }
                     th { "Similarity" }
+                    th { "Artist" }
                     th { "Last.fm" }
                     @for artist in artists {
                         tr {
-                            td { a href=(format!("/artists/{}", encode(artist))) { (artist) } }
                             td { (self.get_child_similarity(artist)) }
-                            td { a href=(format!("https://last.fm/music/{artist}")) { "↪" } }
+                            td { (link(&format!("/artists/{}", encode(artist)), artist)) }
+                            td { (link(&format!("https://last.fm/music/{artist}"), "↪" )) }
                         }
                     }
                 }

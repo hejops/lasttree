@@ -188,6 +188,7 @@ mod tests {
 
     use super::ArtistTree;
     use crate::tests::TestPool;
+    use crate::LASTFM_KEY;
 
     // TODO: initial graph layout often different from when cached data is
     // available. this suggests that we should cache everything first before
@@ -197,7 +198,7 @@ mod tests {
         root: &str,
         expected_nodes: &[&str],
     ) {
-        let pool = &TestPool::new().await.with_key().await.pool;
+        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
         let tree = ArtistTree::new(root)
             .await
             .unwrap()
@@ -243,7 +244,7 @@ mod tests {
 
     #[tokio::test]
     async fn child_similarity() {
-        let pool = &TestPool::new().await.with_key().await.pool;
+        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
         let tree = ArtistTree::new("metallica")
             .await
             .unwrap()

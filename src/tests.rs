@@ -6,7 +6,6 @@ use uuid::Uuid;
 use crate::init_db;
 use crate::store_api_key;
 use crate::SqPool;
-use crate::LASTFM_KEY;
 
 pub struct TestPool {
     pub pool: SqPool,
@@ -20,21 +19,23 @@ impl Drop for TestPool {
 }
 
 impl TestPool {
-    pub async fn new() -> Self {
+    pub async fn new(key: Option<&str>) -> Self {
         let id = Uuid::new_v4();
         let path = format!("/tmp/test-{id}.db");
         // let path = format!("test-{id}.db");
         if Path::new(&path).exists() {
             fs::remove_file(&path).unwrap();
         }
+
         let pool = init_db(&format!("sqlite://{path}")).unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
 
-        TestPool { pool, path }
-    }
+        if let Some(key) = key {
+            if let Err(e) = store_api_key(key, &pool).await {
+                println!("{:?}", e);
+            };
+        };
 
-    pub async fn with_key(self) -> Self {
-        store_api_key(&LASTFM_KEY, &self.pool).await.unwrap();
-        self
+        TestPool { pool, path }
     }
 }

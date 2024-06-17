@@ -28,13 +28,10 @@ pub mod tests;
 mod tree;
 pub use db::*;
 pub use genres::*;
-// pub use html::*;
-// pub use lastfm::*;
 pub use tree::*;
 
 lazy_static::lazy_static! {
-    // TODO: test invalid key
-    // TODO: ask for key, store in db
+    /// Used only for testing
     static ref LASTFM_KEY: String =
         std::env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
     static ref APP_NAME: String = "Last".to_string();

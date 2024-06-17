@@ -69,11 +69,12 @@ mod tests {
 
     use crate::tests::TestPool;
     use crate::ArtistTree;
+    use crate::LASTFM_KEY;
 
     #[tokio::test]
     async fn basic_styling() {
-        // TODO: remove network requirement
-        let pool = &TestPool::new().await.with_key().await.pool;
+        // TODO: remove network requirement?
+        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
         let a = ArtistTree::new("loona")
             .await
             .unwrap()

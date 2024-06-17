@@ -36,6 +36,10 @@ async fn home() -> actix_web::Result<Markup> {
             li { (html::link("/artists", "Artists")) }
             li { (html::link("/genres", "Genres")) }
         }
+        // div class="spacer" {}
+        // footer {
+        //     (html::link("/prefs", "Preferences"))
+        // }
     };
     // https://www.last.fm/api/show/library.getArtists
     Ok(html)
@@ -173,3 +177,5 @@ mod tests {
             .unwrap();
     }
 }
+
+// TODO: test api key submission (i.e. POST /login)

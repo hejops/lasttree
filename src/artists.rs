@@ -96,18 +96,10 @@ impl ArtistTree {
         // String -> Value -> struct
         let resp = reqwest::get(url).await?.text().await?;
         let raw_json: Value = serde_json::from_str::<Value>(&resp)?;
-        let json = raw_json
-            .get("similarartists")
-            .context("no similarartists")?;
+        let json = &raw_json["similarartists"];
         let artist: LastfmArtist = serde_json::from_value(json.clone())?;
 
-        let canon: String = serde_json::from_value(
-            artist
-                .attr
-                .get("artist")
-                .context("no artist field")?
-                .clone(),
-        )?;
+        let canon: String = serde_json::from_value(artist.attr["artist"].clone())?;
         // i would have liked to leave mutation of self to callers, but i'd have to
         // return canon_name in addition to map, leading to an ugly function
         // signature
@@ -132,12 +124,13 @@ mod tests {
     use crate::get_api_key;
     use crate::tests::TestPool;
     use crate::ArtistTree;
+    use crate::LASTFM_KEY;
 
     async fn check_similars(
         parent: &str,
         children: &[&str],
     ) {
-        let pool = &TestPool::new().await.with_key().await.pool;
+        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
         let mut artist = ArtistTree::new(parent).await.unwrap();
 
         let retrieved = artist.get_similar_artists(pool).await.unwrap();
@@ -158,15 +151,24 @@ mod tests {
 
     #[tokio::test]
     async fn no_key() {
-        let pool = &TestPool::new().await.pool;
+        let pool = &TestPool::new(None).await.pool;
         let mut artist = ArtistTree::new("loona").await.unwrap();
 
         assert!(get_api_key(pool).await.unwrap().is_none());
 
         let retrieved = artist.get_similar_artists(pool).await;
-        // println!("{:?}", retrieved);
         assert!(retrieved.is_err());
-        // panic!();
+    }
+
+    #[tokio::test]
+    async fn invalid_key() {
+        let pool = &TestPool::new(Some("foo")).await.pool;
+        let mut artist = ArtistTree::new("loona").await.unwrap();
+
+        assert!(get_api_key(pool).await.unwrap().is_none());
+
+        let retrieved = artist.get_similar_artists(pool).await;
+        assert!(retrieved.is_err());
     }
 
     #[tokio::test]
@@ -199,7 +201,7 @@ mod tests {
 
     #[tokio::test]
     async fn cached_result() {
-        let pool = &TestPool::new().await.with_key().await.pool;
+        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
 
         let mut artist = ArtistTree::new("loona").await.unwrap();
 

@@ -168,6 +168,15 @@ pub async fn store_api_key(
     pool: &Pool<Sqlite>,
 ) -> anyhow::Result<()> {
     let key = key.trim();
+
+    let url = format!(
+        "https://ws.audioscrobbler.com/2.0/?method=chart.gettoptags&api_key={}&format=json&limit=1",
+        key
+    );
+    (reqwest::get(url).await?.status().as_u16() == 200)
+        .then_some(())
+        .ok_or(anyhow::anyhow!("Invalid API key"))?;
+
     sqlx::query!(
         r#"
         INSERT INTO api_key
@@ -178,5 +187,10 @@ pub async fn store_api_key(
     .execute(pool)
     .await?;
 
+    Ok(())
+}
+
+pub async fn delete_api_key(pool: &Pool<Sqlite>) -> anyhow::Result<()> {
+    sqlx::query!("DELETE FROM api_key",).execute(pool).await?;
     Ok(())
 }
