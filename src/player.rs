@@ -1,3 +1,18 @@
+//! Module for sending simple search queries to YouTube and retrieving
+//! audio-only URLs (googlevideo). `yt-dlp` (or similar) is a required
+//! dependency.
+
+// The full sequence is as follows:
+//
+// 1. search YouTube with some query
+// 2. extract first UC... channel_id (buried in a script, but doable with regex)
+// 3. pass to channel_id to /feeds/
+// 4. parse xml (relatively easy), extract first "link rel"
+// 5. parse YouTube source for a googlevideo URL (again, somewhat doable with
+//    regex)
+// 6. decrypt the URL -- this is basically where i throw in the towel, as decryption is not at all
+//    trivial: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube.py#L3854
+
 use anyhow::Context;
 use youtube_dl::SearchOptions;
 use youtube_dl::YoutubeDl;
@@ -6,28 +21,22 @@ pub async fn search_youtube(query: &str) -> anyhow::Result<String> {
     let opts = SearchOptions::youtube(query);
     let pl = YoutubeDl::search_for(&opts)
         .run_async()
-        .await
-        .unwrap()
+        .await?
         .into_playlist()
-        .unwrap()
+        .context("no search results")?
         .entries
-        .unwrap();
+        .context("'entries' field empty")?;
     // println!("{:#?}", pl);
     let first = pl
-        .iter()
-        .filter(|f| f.webpage_url.is_some())
-        .map(|f| f.clone().webpage_url.unwrap())
+        .into_iter()
+        .filter_map(|f| f.webpage_url)
         .next()
-        .unwrap();
+        .context("no search results")?;
     // println!("{:?}", res);
     get_youtube_audio_link(&first).await
 }
 
-pub async fn get_youtube_audio_link(url: &str) -> anyhow::Result<String> {
-    // yt[m] -> extract UC -> pass to /feeds/ -> extract link rel -> extract audio
-    // url (requires decryption, which is not trivial!)
-    // https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube.py#L3854
-
+async fn get_youtube_audio_link(url: &str) -> anyhow::Result<String> {
     // r#"https://music.youtube.com/channel[^"?]+"#
     // "https://www.youtube.com/feeds/videos.xml?channel_id={id}"
 
@@ -36,13 +45,13 @@ pub async fn get_youtube_audio_link(url: &str) -> anyhow::Result<String> {
         .run_async()
         .await?
         .into_single_video()
-        .context("into_single_video")?
+        .context("could not extract single video")?
         .formats
-        .context("formats")?
+        .context("'formats' field empty")?
         .into_iter()
         .filter_map(|f| f.url)
         .find(|s| s.contains("audio") && !s.contains("manifest"))
-        .context("formats")?;
+        .context("no audio formats")?;
     Ok(link)
 }
 
