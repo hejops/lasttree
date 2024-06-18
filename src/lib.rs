@@ -19,6 +19,7 @@
 // https://users.rust-lang.org/t/principles-for-using-mod-vs-pub-mod/27814/2
 
 mod artists;
+pub mod charts;
 mod db;
 pub mod dot;
 mod genres;
@@ -32,9 +33,14 @@ pub use genres::*;
 pub use tree::*;
 
 lazy_static::lazy_static! {
+    static ref WEEK: u32 = 60 * 60 * 24 * 7;
+
     /// Used only for testing
+    static ref LASTFM_USER: String =
+        std::env::var("LASTFM_USER").expect("Environment variable $LASTFM_USER must be set");
     static ref LASTFM_KEY: String =
         std::env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
+
     static ref APP_NAME: String = "Last".to_string();
 
     /// A base64 engine used to crudely pass data from one endpoint to another

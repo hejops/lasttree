@@ -36,8 +36,9 @@ pub async fn get_json(url: &str) -> anyhow::Result<Value> {
     Ok(serde_json::from_str::<Value>(&resp)?)
 }
 
+/// https://www.last.fm/api/show/chart.getTopTags
+// nearly identical to tag.getTopTags
 pub async fn get_top_genres() -> anyhow::Result<Genres> {
-    // https://www.last.fm/api/show/chart.getTopTags
     let url = format!(
         "https://ws.audioscrobbler.com/2.0/?method=chart.gettoptags&api_key={}&format=json",//&limit=3",
         *LASTFM_KEY

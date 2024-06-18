@@ -27,11 +27,13 @@ async fn main() -> anyhow::Result<()> {
             //
             // .route("/", web::get().to(home))
             .service(routes::home)
-            .service(routes::login)
             .service(routes::search_artists)
             .service(routes::post_artists)
             .service(routes::show_artist)
             .service(routes::genres)
+            .service(routes::get_charts)
+            // auxiliary
+            .service(routes::login)
             .service(routes::search_youtube)
             .default_service(web::route().to(routes::not_found))
             .app_data(pool.clone())

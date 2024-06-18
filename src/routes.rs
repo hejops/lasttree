@@ -7,6 +7,7 @@ use maud::html;
 use maud::Markup;
 use serde::Deserialize;
 
+use crate::charts;
 use crate::error_500;
 use crate::get_api_key;
 use crate::get_top_genres;
@@ -35,7 +36,8 @@ async fn home() -> actix_web::Result<Markup> {
         h2 { "Home" }
         ul {
             li { (html::link("/artists", "Artists")) }
-            li { (html::link("/genres", "Genres")) }
+            // li { (html::link("/genres", "Genres")) }
+            li { (html::link("/charts", "Charts")) }
         }
         // div class="spacer" {}
         // footer {
@@ -140,7 +142,6 @@ async fn show_artist(
 }
 
 // https://www.last.fm/api/show/geo.getTopArtists
-// https://www.last.fm/api/show/library.getArtists
 // https://www.last.fm/api/show/user.getTopArtists
 
 #[get("/genres")]
@@ -155,28 +156,42 @@ async fn genres() -> actix_web::Result<Markup> {
         }
     // TODO: hx-swap afterend? this requires us to keep track of what page we are on
     // https://htmx.org/attributes/hx-swap/
-    // TODO: https://www.last.fm/api/show/tag.getTopArtists
     };
     Ok(html)
 }
 
-#[get("/genres/{genre}")]
-async fn show_genre(
-    path: web::Path<String>,
-    // pool: web::Data<SqPool>,
-) -> actix_web::Result<Markup> {
-    let genre = path.into_inner();
+// note that last.fm has no concept whatsoever of "trending" with filters, aside
+// from the global chart, which is next to useless for discovery
+//
+// https://www.last.fm/tag/rock
+//
+// for this purpose, bandcamp/spotify/discogs are better alternatives
 
-    // let html = match ArtistTree::new(&artist).await {
-    //     Ok(tree) => tree,
-    //     Err(_) => html! {
-    //         "Genre not found: "(genre)
-    //         p { (html::link("/", "Home")) }
-    //     },
-    // };
+// #[get("/genres/{genre}")]
+// async fn show_genre(
+//     path: web::Path<String>,
+//     // pool: web::Data<SqPool>,
+// ) -> actix_web::Result<Markup> {
+//     let genre = path.into_inner();
+//
+//     // let html = match ArtistTree::new(&artist).await {
+//     //     Ok(tree) => tree,
+//     //     Err(_) => html! {
+//     //         "Genre not found: "(genre)
+//     //         p { (html::link("/", "Home")) }
+//     //     },
+//     // };
+//
+//     let html = html! {};
+//
+//     Ok(html)
+// }
 
+#[get("/charts")]
+async fn get_charts() -> actix_web::Result<Markup> {
+    // arguably, we don't need to cache this
+    // let genres = charts::week().await.map_err(error_500)?;
     let html = html! {};
-
     Ok(html)
 }
 
