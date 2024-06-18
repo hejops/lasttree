@@ -10,7 +10,8 @@ use serde::Deserialize;
 use crate::error_500;
 use crate::get_api_key;
 use crate::get_top_genres;
-use crate::html; // should not conflict with maud::html
+use crate::html;
+// should not conflict with maud::html
 use crate::store_api_key;
 use crate::ArtistTree;
 use crate::SqPool;
@@ -162,7 +163,7 @@ async fn genres() -> actix_web::Result<Markup> {
 #[get("/genres/{genre}")]
 async fn show_genre(
     path: web::Path<String>,
-    pool: web::Data<SqPool>,
+    // pool: web::Data<SqPool>,
 ) -> actix_web::Result<Markup> {
     let genre = path.into_inner();
 
@@ -178,6 +179,30 @@ async fn show_genre(
 
     Ok(html)
 }
+
+#[post("/youtube/{query}")]
+async fn search_youtube(
+    path: web::Path<String>,
+    // pool: web::Data<SqPool>,
+) -> actix_web::Result<Markup> {
+    let query = path.into_inner();
+
+    // yt embed would be the simplest option, but it is not very useful, unless i
+    // can customise it to show only the button/progress (which was possible
+    // way back in like 2009)
+    // https://developers.google.com/youtube/player_parameters
+
+    // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio
+
+    let html = html! {
+        audio controls autoplay {
+            source src=(crate::player::search_youtube(&query).await.unwrap()) {}
+        }
+    };
+
+    Ok(html)
+}
+
 #[cfg(test)]
 mod tests {
     use wiremock::matchers::method;
