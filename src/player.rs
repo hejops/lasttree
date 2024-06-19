@@ -15,65 +15,87 @@
 
 use anyhow::Context;
 use youtube_dl::SearchOptions;
+use youtube_dl::SingleVideo;
 use youtube_dl::YoutubeDl;
 
-pub async fn search_youtube(query: &str) -> anyhow::Result<String> {
-    let opts = SearchOptions::youtube(query);
-    let pl = YoutubeDl::search_for(&opts)
+#[derive(Debug)]
+pub struct YoutubeAudio {
+    /// Decrypted googlevideo link
+    pub link: String,
+    pub uploader: String,
+    pub title: String,
+}
+
+pub async fn search_youtube(query: &str) -> anyhow::Result<YoutubeAudio> {
+    let opts = SearchOptions::youtube(query).with_count(3);
+    let results = YoutubeDl::search_for(&opts)
         .run_async()
         .await?
         .into_playlist()
         .context("no search results")?
         .entries
         .context("'entries' field empty")?;
-    // println!("{:#?}", pl);
-    let first = pl
-        .into_iter()
-        .filter_map(|f| f.webpage_url)
-        .next()
+
+    let first = results
+        .iter()
+        .find(|r| {
+            r.categories
+                .as_ref()
+                .unwrap()
+                .contains(&Some("Music".to_owned()))
+        })
         .context("no search results")?;
-    // println!("{:?}", res);
-    get_youtube_audio_link(&first).await
+
+    get_youtube_audio_link(first.clone()).await
 }
 
-async fn get_youtube_audio_link(url: &str) -> anyhow::Result<String> {
+/// Transform `SingleVideo` into a simpler `YoutubeAudio` struct. No requests
+/// are made.
+async fn get_youtube_audio_link(vid: SingleVideo) -> anyhow::Result<YoutubeAudio> {
     // r#"https://music.youtube.com/channel[^"?]+"#
     // "https://www.youtube.com/feeds/videos.xml?channel_id={id}"
 
-    let link = YoutubeDl::new(url)
-        .socket_timeout("15")
-        .run_async()
-        .await?
-        .into_single_video()
-        .context("could not extract single video")?
+    // println!("{:#?}", vid);
+
+    let link = vid
         .formats
         .context("'formats' field empty")?
         .into_iter()
         .filter_map(|f| f.url)
         .find(|s| s.contains("audio") && !s.contains("manifest"))
         .context("no audio formats")?;
-    Ok(link)
+
+    let uploader = vid.uploader.context("'uploader' field empty")?;
+    let title = vid.title.context("'title' field empty")?;
+
+    let audio = YoutubeAudio {
+        link,
+        uploader,
+        title,
+    };
+    Ok(audio)
 }
 
 #[cfg(test)]
 mod tests {
 
     #[tokio::test]
-    async fn extract_googlevideo() {
-        let url = "https://youtube.com/watch?v=nHYOoyksB_I";
-        let audio = crate::player::get_youtube_audio_link(url).await.unwrap();
-        // println!("{:?}", audio);
-        assert_eq!(reqwest::get(&audio).await.unwrap().status(), 200);
-        assert!(audio.contains("mime=audio"));
-        assert!(audio.contains("dur=174.278")); // microsecond can vary?
-    }
-
-    #[tokio::test]
-    async fn search() {
+    async fn search_artist_with_title() {
         let audio = crate::player::search_youtube("death grips warping")
             .await
             .unwrap();
         // println!("{:?}", audio);
-        assert_eq!(reqwest::get(&audio).await.unwrap().status(), 200);
+        assert_eq!(reqwest::get(&audio.link).await.unwrap().status(), 200);
+        assert!(audio.link.contains("mime=audio"));
+
+        // microsecond can and will vary!
+        assert!(audio.link.contains("dur=174."), "{}", audio.link);
+    }
+
+    #[tokio::test]
+    async fn search_artist_only() {
+        let audio = crate::player::search_youtube("maaya uchida").await.unwrap();
+        assert_eq!(reqwest::get(&audio.link).await.unwrap().status(), 200);
+        assert_eq!(audio.uploader, "内田真礼（UCHIDA MAAYA）Official Channel");
     }
 }
