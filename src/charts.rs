@@ -9,12 +9,12 @@ use crate::LASTFM_USER;
 #[derive(Deserialize, Debug)]
 pub struct Chart {
     #[serde(rename = "artist")]
-    artists: Vec<ChartArtist>,
+    pub artists: Vec<ChartArtist>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct ChartArtist {
-    name: String,
+    pub name: String,
     url: String,
 
     #[serde(deserialize_with = "str_to_u64")]
@@ -65,7 +65,7 @@ where
     }
 }
 
-async fn week() -> anyhow::Result<Chart> {
+pub async fn week() -> anyhow::Result<Chart> {
     let url = format!(
         "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&format=json&limit=3",
         *LASTFM_USER,

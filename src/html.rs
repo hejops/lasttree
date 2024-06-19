@@ -19,6 +19,7 @@ pub fn api_key_form(redirect_to: &str) -> Markup {
             {
                 label { "API key: "
                     input
+                        required
                         type="password"
                         name="key"
                         { }
@@ -69,6 +70,21 @@ pub fn list_item(s: &str) -> Markup {
     }
 }
 
+pub fn spinner() -> Markup {
+    use std::fs;
+
+    use base64::engine::general_purpose;
+    use base64::Engine;
+
+    // https://github.com/Techcable/smstools/blob/a49d5c507333359e93e8a2e2bed63666e8dea145/src/html.rs#L88
+    let spinner = fs::read("./img/spinner.svg").unwrap();
+    let spinner = format!(
+        "data:image/svg+xml;base64,{}",
+        general_purpose::STANDARD.encode(spinner)
+    );
+    html! { (spinner) }
+}
+
 impl ArtistTree {
     pub async fn as_html(&self) -> anyhow::Result<Markup> {
         // row order must be independent of graph node order
@@ -88,21 +104,43 @@ impl ArtistTree {
         //
         // importantly, this means that we don't have to create a "spare" GET endpoint,
         // and users are never exposed to it
+        // TODO: on clicking any button, stop/pause all other playing audio
         let yt_button = |query| {
             html! {
                 button
                     hx-post={"/youtube/"(encode(query))}
+                    hx-trigger="click" // send post request only on click
                     hx-swap="outerHTML"
-                    // hx-swap="beforeend"
-                    // hx-target={"#"(foo)}
-                    // hx-target="#foo"
-                    { "YouTube" }
-                // p id="foo" {}
+                {
+                    "YouTube"
+                    // on click, spawn a spinner -beside- text
+                    // visually awkward, since space is pre-allocated for the
+                    // spinner, but it gets the job done
+                    // ideally, the spinner should either replace the text,
+                    // or no extra space should be allocated
+                    img class="htmx-indicator" width="20" src=(spinner()) {}
+                }
             }
         };
 
         // TODO: right align Similarity values (but not header)
         // https://stackoverflow.com/a/1332648
+
+        // // https://stackoverflow.com/a/49012896
+        // // TODO: could use a [(String (col), fn)] to generate table
+        // let cols = vec![
+        //     //
+        //     // ("Similarity", |artist| self.get_child_similarity(artist)),
+        //     (
+        //         "Artist",
+        //         Box::new(|artist| link(&format!("/artists/{}", encode(artist)),
+        // artist))             as Box<dyn Fn(&str) -> Markup>,
+        //     ),
+        //     // (
+        //     //     "Links",
+        //     //     Box::new(|artist| link(&format!("https://last.fm/music/{artist}"), "Last.fm")),
+        //     // ),
+        // ];
 
         let table = html! {
             table {

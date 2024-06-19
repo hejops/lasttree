@@ -82,6 +82,7 @@ pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup
                 {
                     label { "Search artist: "
                         input
+                            required
                             type="text"
                             value="metallica"
                             autofocus="true"
@@ -190,8 +191,15 @@ async fn genres() -> actix_web::Result<Markup> {
 #[get("/charts")]
 async fn get_charts() -> actix_web::Result<Markup> {
     // arguably, we don't need to cache this
-    // let genres = charts::week().await.map_err(error_500)?;
-    let html = html! {};
+    let chart = charts::week().await.map_err(error_500)?;
+
+    let html = html! {
+        ol {
+            @for x in chart.artists {
+                li { (x.name) }
+            }
+        }
+    };
     Ok(html)
 }
 
@@ -207,12 +215,14 @@ async fn search_youtube(
     // way back in like 2009)
     // https://developers.google.com/youtube/player_parameters
 
-    // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio
+    // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio#usage_notes
 
+    let audio = crate::player::search_youtube(&query).await.unwrap();
     let html = html! {
-        audio controls autoplay {
-            source src=(crate::player::search_youtube(&query).await.unwrap()) {}
-        }
+        p {}
+        audio controls autoplay
+            { source src=(audio.link) { } }
+        p { (audio.title) }
     };
 
     Ok(html)
@@ -244,3 +254,4 @@ mod tests {
 }
 
 // TODO: test api key submission (i.e. POST /login)
+// TODO: test /youtube/query
