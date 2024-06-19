@@ -116,7 +116,7 @@ async fn post_artists(form: web::Form<ArtistFormData>) -> impl Responder {
     redirect(&path).await
 }
 
-#[post("/artists/{artist}")]
+#[get("/artists/{artist}")]
 async fn show_artist(
     // https://actix.rs/docs/url-dispatch/#scoping-routes
     // TODO: capture url params? (e.g. /artists/foo?key=val)
