@@ -18,10 +18,10 @@ pub struct ChartArtist {
     url: String,
 
     #[serde(deserialize_with = "str_to_u64")]
-    playcount: u64,
+    pub playcount: u64,
 
     #[serde(rename = "@attr", deserialize_with = "extract_inner")]
-    rank: u64,
+    pub rank: u64,
 }
 
 fn str_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
@@ -67,7 +67,7 @@ where
 
 pub async fn week() -> anyhow::Result<Chart> {
     let url = format!(
-        "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&format=json&limit=3",
+        "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&format=json",//&limit=3",
         *LASTFM_USER,
         *LASTFM_KEY
     );

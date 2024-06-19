@@ -5,6 +5,7 @@ use actix_web::HttpResponse;
 use actix_web::Responder;
 use maud::html;
 use maud::Markup;
+use maud::PreEscaped;
 use serde::Deserialize;
 
 use crate::charts;
@@ -17,6 +18,7 @@ use crate::store_api_key;
 use crate::ArtistTree;
 use crate::SqPool;
 use crate::APP_NAME;
+use crate::LASTFM_USER;
 
 // as far as possible, this file should not contain overly complicated markup;
 // simple markup is still ok for locality of behaviour
@@ -71,14 +73,14 @@ pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup
     let key = get_api_key(&pool).await.map_err(error_500)?;
 
     let html = html! {
-        (html::header())
-        h2 { "Artists" }
+        (html::header("Artists"))
         @if key.is_none() {
             (html::api_key_form("/artists"))
         } @else {
             form
                 method="POST"
                 action="/artists"
+                // hx-post={"/artists/"(encode(query))}
                 {
                     label { "Search artist: "
                         input
@@ -114,7 +116,7 @@ async fn post_artists(form: web::Form<ArtistFormData>) -> impl Responder {
     redirect(&path).await
 }
 
-#[get("/artists/{artist}")]
+#[post("/artists/{artist}")]
 async fn show_artist(
     // https://actix.rs/docs/url-dispatch/#scoping-routes
     // TODO: capture url params? (e.g. /artists/foo?key=val)
@@ -150,8 +152,7 @@ async fn genres() -> actix_web::Result<Markup> {
     // arguably, we don't need to cache this
     let genres = get_top_genres().await.map_err(error_500)?;
     let html = html! {
-        (html::header())
-        h2 { "Genres" }
+        (html::header("Genres"))
         @for g in genres.0.iter() {
             (html::list_item(&html::link(&g.url, &g.name.to_lowercase()).into_string()))
         }
@@ -193,16 +194,36 @@ async fn get_charts() -> actix_web::Result<Markup> {
     // arguably, we don't need to cache this
     let chart = charts::week().await.map_err(error_500)?;
 
+    let user = LASTFM_USER.as_str();
+    let library_link = |user, artist| {
+        format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
+    };
+
+    // println!("{:#?}", chart);
+
     let html = html! {
-        ol {
-            @for x in chart.artists {
-                li { (x.name) }
+        (html::header("Top artists"))
+        table {
+            th {"#"}
+            th {"Artist"}
+            th {"Plays"}
+            @for artist in chart.artists {
+                @let name = artist.name;
+                @let link = library_link(user, name.clone());
+                @let cols=vec![
+                    artist.rank.to_string(),
+                    (html::link(&link, &name).into()),
+                    artist.playcount.to_string(),
+                ];
+                (html::table_row(cols))
             }
+            // TODO: final row to load next page
         }
     };
     Ok(html)
 }
 
+/// No request body is required.
 #[post("/youtube/{query}")]
 async fn search_youtube(
     path: web::Path<String>,
@@ -247,9 +268,27 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        reqwest::get(format!("{}/artists/loona", mock_server.uri()))
+        let resp = reqwest::get(format!("{}/artists/loona", mock_server.uri()))
             .await
             .unwrap();
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn youtube() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/youtube/metallica"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let url = format!("{}/youtube/metallica", mock_server.uri());
+        println!("{:?}", url);
+        let resp = reqwest::Client::new().post(url).send().await.unwrap();
+        assert_eq!(resp.status(), 200);
     }
 }
 

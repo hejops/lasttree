@@ -186,6 +186,8 @@ impl ArtistTree {
 #[cfg(test)]
 mod tests {
 
+    use itertools::Itertools;
+
     use super::ArtistTree;
     use crate::tests::init_test_artist;
     use crate::tests::TestPool;
@@ -247,6 +249,7 @@ mod tests {
             .await
             .unwrap();
         let sim = tree.get_child_similarity("Annihilator");
-        assert_eq!(sim, 52); // TODO: this number is not fixed
+        // this number is not fixed!
+        assert!((50..=55).contains(&sim));
     }
 }

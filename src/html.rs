@@ -50,16 +50,20 @@ pub fn link(
     html! { a href=(path) { (label) } }
 }
 
-pub fn header() -> Markup {
+pub fn header(page_title: &str) -> Markup {
     html! {
         (link("/", "Home"))
+        h2 { (page_title) }
     }
 }
 
-pub fn table_row(s: &str) -> Markup {
+pub fn table_row(cols: Vec<String>) -> Markup {
     html! {
         tr {
-            td { (PreEscaped(s)) }
+            @for s in cols {
+                td { (PreEscaped(s)) }
+                // td { (s) }
+            }
         }
     }
 }
@@ -196,17 +200,20 @@ mod tests {
     use crate::html::table_row;
 
     #[test]
-    fn table() {
+    fn test_link() {
         let x = "loona";
         let link = get_lastfm_url(x);
+
         assert_eq!(
             &link.clone().into_string(),
             r#"<a href="https://last.fm/music/loona">loona</a>"#
         );
-        let row = table_row(&link.into_string());
+
+        let cols = vec!["1".to_string(), link.into_string()];
+        let row = table_row(cols);
         assert_eq!(
             row.into_string(),
-            r#"<tr><td><a href="https://last.fm/music/loona">loona</a></td></tr>"#
+            r#"<tr><td>1</td><td><a href="https://last.fm/music/loona">loona</a></td></tr>"#
         );
     }
 }
