@@ -52,11 +52,13 @@ pub fn link(
 
 pub fn header(page_title: &str) -> Markup {
     html! {
+        title { (APP_NAME.to_string())" - "(page_title) }
         (link("/", "Home"))
         h2 { (page_title) }
     }
 }
 
+/// <tr><td>
 pub fn table_row(cols: Vec<String>) -> Markup {
     html! {
         tr {
@@ -108,22 +110,16 @@ impl ArtistTree {
         //
         // importantly, this means that we don't have to create a "spare" GET endpoint,
         // and users are never exposed to it
-        // TODO: on clicking any button, stop/pause all other playing audio
         let yt_button = |query| {
             html! {
                 button
                     hx-post={"/youtube/"(encode(query))}
                     hx-trigger="click" // send post request only on click
-                    hx-swap="outerHTML"
-                {
-                    "YouTube"
-                    // on click, spawn a spinner -beside- text
-                    // visually awkward, since space is pre-allocated for the
-                    // spinner, but it gets the job done
-                    // ideally, the spinner should either replace the text,
-                    // or no extra space should be allocated
-                    img class="htmx-indicator" width="20" src=(spinner()) {}
-                }
+                    hx-swap="innerHTML" // if outerHTML, once #player is replaced, it cannot be
+                                        // replaced again!
+                    hx-target="#player" // must be #, not .
+                    hx-indicator=".htmx-indicator"
+                { "YouTube" }
             }
         };
 
@@ -151,18 +147,16 @@ impl ArtistTree {
                 th { "Similarity" }
                 th { "Artist" }
                 th { "Links" }
-                // th { "YouTube" }
                 @for artist in artists {
-                    tr {
-                        td { (self.get_child_similarity(artist)) }
-                        td { (link(&format!("/artists/{}", encode(artist)), artist)) }
-                        td {
-                            (link(&format!("https://last.fm/music/{artist}"), "Last.fm" ))
-                            " "
-                            (yt_button(artist))
-                        }
-                        // td { (player) }
-                    }
+                    @let cols = vec![
+                        self.get_child_similarity(artist).to_string(),
+                        link(&format!("/artists/{}", encode(artist)), artist).into(),
+                        (format!("{} {}",
+                            link(&format!("https://last.fm/music/{artist}"), "Last.fm").into_string(),
+                            yt_button(artist).into_string(),
+                        ))
+                    ];
+                    (table_row(cols))
                 }
             }
         };
@@ -173,11 +167,9 @@ impl ArtistTree {
                 style {
                     "table, th, td { border: 1px solid grey; }"
                 }
-                title { (APP_NAME.to_string())": "(self.root) }
-                // a href=("/") { "Home" }
-                (link("/", "Home"))
+                (header(&format!("Artist: {}", self.root)))
+                // h1 { (get_lastfm_url(&self.root)) }
                 body {
-                    h1 { (get_lastfm_url(&self.root)) }
                     (yt_button(&self.root))
                     // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/details
                     // this could be toggled with htmx, but pure html is more elegant
@@ -185,6 +177,12 @@ impl ArtistTree {
                         summary { "Tree" }
                         (PreEscaped(&self.as_svg()))
                     }
+                    span class="htmx-indicator" {
+                        img width="20" src=(spinner()) {}
+                        // TODO: inject value from yt_button into this string?
+                        "Searching..."
+                    }
+                    span id="player" { }
                     (table)
                 }
             }

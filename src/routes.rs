@@ -210,6 +210,7 @@ async fn get_charts() -> actix_web::Result<Markup> {
             @for artist in chart.artists {
                 @let name = artist.name;
                 @let link = library_link(user, name.clone());
+                @let link = format!("/artists/{name}");
                 @let cols=vec![
                     artist.rank.to_string(),
                     (html::link(&link, &name).into()),

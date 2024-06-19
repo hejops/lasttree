@@ -15,13 +15,14 @@ pub struct Chart {
 #[derive(Deserialize, Debug)]
 pub struct ChartArtist {
     pub name: String,
-    url: String,
 
     #[serde(deserialize_with = "str_to_u64")]
     pub playcount: u64,
 
     #[serde(rename = "@attr", deserialize_with = "extract_inner")]
     pub rank: u64,
+    // last.fm/music/x link, not terribly useful
+    // url: String,
 }
 
 fn str_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
