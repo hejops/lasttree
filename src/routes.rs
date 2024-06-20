@@ -5,15 +5,12 @@ use actix_web::HttpResponse;
 use actix_web::Responder;
 use maud::html;
 use maud::Markup;
-use maud::PreEscaped;
 use serde::Deserialize;
 
 use crate::charts;
 use crate::error_500;
 use crate::get_api_key;
-use crate::get_top_genres;
 use crate::html;
-// should not conflict with maud::html
 use crate::store_api_key;
 use crate::ArtistTree;
 use crate::SqPool;
@@ -136,7 +133,7 @@ async fn show_artist(
         Err(_) => html! {
             "Artist not found: "(artist)
             p { (html::link("/artists", "Return")) }
-        // TODO: redirect to artist search
+        // TODO: try artist search, then show results in list
         // https://www.last.fm/api/show/artist.search
         },
     };
@@ -147,23 +144,24 @@ async fn show_artist(
 // https://www.last.fm/api/show/geo.getTopArtists
 // https://www.last.fm/api/show/user.getTopArtists
 
-#[get("/genres")]
-async fn genres() -> actix_web::Result<Markup> {
-    // arguably, we don't need to cache this
-    let genres = get_top_genres().await.map_err(error_500)?;
-    let html = html! {
-        (html::header("Genres"))
-        @for g in genres.0.iter() {
-            (html::list_item(&html::link(&g.url, &g.name.to_lowercase()).into_string()))
-        }
-    // TODO: hx-swap afterend? this requires us to keep track of what page we are on
-    // https://htmx.org/attributes/hx-swap/
-    };
-    Ok(html)
-}
+// #[get("/genres")]
+// async fn genres() -> actix_web::Result<Markup> {
+//     // arguably, we don't need to cache this
+//     let genres = get_top_genres().await.map_err(error_500)?;
+//     let html = html! {
+//         (html::header("Genres"))
+//         @for g in genres.0.iter() {
+//             (html::list_item(&html::link(&g.url,
+// &g.name.to_lowercase()).into_string()))         }
+//     // TODO: hx-swap afterend? this requires us to keep track of what page we
+// are on     // https://htmx.org/attributes/hx-swap/
+//     };
+//     Ok(html)
+// }
 
-// note that last.fm has no concept whatsoever of "trending" with filters, aside
-// from the global chart, which is next to useless for discovery
+// note that aside from the global chart, last.fm has no concept whatsoever of
+// "trending" tags with filters (e.g. top artists for tag X in the last n
+// weeks), which is next to useless for discovery
 //
 // https://www.last.fm/tag/rock
 //
@@ -189,20 +187,21 @@ async fn genres() -> actix_web::Result<Markup> {
 //     Ok(html)
 // }
 
+// TODO: /charts -> cached, /charts/{user} -> user
 #[get("/charts")]
 async fn get_charts() -> actix_web::Result<Markup> {
     // arguably, we don't need to cache this
     let chart = charts::week().await.map_err(error_500)?;
 
-    // let user = LASTFM_USER.as_str();
-    // let library_link = |user: &str, artist: &str| {
-    //     format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
-    // };
+    let user = LASTFM_USER.as_str();
+    let library_link = |user: &str, artist: &str| {
+        format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
+    };
 
     // println!("{:#?}", chart);
 
     let html = html! {
-        (html::header("Top artists"))
+        (html::header(&format!("Top artists for {user}")))
         table {
 
             th {"#"}
@@ -225,7 +224,8 @@ async fn get_charts() -> actix_web::Result<Markup> {
             //     (table_row(cols.iter().map(|x| (x.1)(artist)).collect()))
             // }
 
-            // TODO: final row to load next page
+            // TODO: final row to load next page (hx-swap="afterend")
+            // https://htmx.org/examples/click-to-load/
         }
     };
     Ok(html)
@@ -233,10 +233,7 @@ async fn get_charts() -> actix_web::Result<Markup> {
 
 /// No request body is required.
 #[post("/youtube/{query}")]
-async fn search_youtube(
-    path: web::Path<String>,
-    // pool: web::Data<SqPool>,
-) -> actix_web::Result<Markup> {
+async fn search_youtube(path: web::Path<String>) -> actix_web::Result<Markup> {
     let query = path.into_inner();
 
     // yt embed would be the simplest option, but it is not very useful, unless i
@@ -310,4 +307,4 @@ mod tests {
 }
 
 // TODO: test api key submission (i.e. POST /login)
-// TODO: test /youtube/query
+// TODO: test that failure to search artist redirects to /artists

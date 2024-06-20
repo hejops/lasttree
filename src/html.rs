@@ -97,7 +97,6 @@ pub fn spinner() -> Markup {
 impl ArtistTree {
     pub async fn as_html(&self) -> anyhow::Result<Markup> {
         // row order must be independent of graph node order
-        // TODO: sort table (frontend)
         let mut artists: Vec<&String> = self.nodes.keys().filter(|n| **n != self.root).collect();
         artists.sort_by_key(|a| -self.get_child_similarity(a));
 
@@ -106,6 +105,10 @@ impl ArtistTree {
         // } else {
         //     artists.sort()
         // };
+
+        // TODO: /artists/X/json endpoint to re-export youtube results (for piping into
+        // mpv)
+        // TODO: new column + button to "ignore" artists (new table)
 
         // Note that the normal pattern of POST/redirect/GET, which is needed to avoid
         // problems with page refresh and form re-submission, is not needed in

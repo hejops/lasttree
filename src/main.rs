@@ -30,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
             .service(routes::search_artists)
             .service(routes::post_artists)
             .service(routes::show_artist)
-            .service(routes::genres)
+            // .service(routes::genres)
             .service(routes::get_charts)
             // auxiliary
             .service(routes::login)

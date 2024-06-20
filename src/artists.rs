@@ -2,8 +2,6 @@
 //!
 //! http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json
 
-// TODO: rename to artists / similar_artists
-
 use std::f64;
 
 use anyhow::Context;
