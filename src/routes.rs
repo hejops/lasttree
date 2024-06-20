@@ -125,17 +125,17 @@ async fn show_artist(
 ) -> actix_web::Result<Markup> {
     let artist = path.into_inner();
 
-    let html = match ArtistTree::new(&artist).await {
-        Ok(tree) => tree
-            .build_tree(&pool)
-            .await
-            .map_err(error_500)?
-            .as_html()
-            .await
-            .map_err(error_500)?,
+    let html = match ArtistTree::new(&artist)
+        .await
+        .map_err(error_500)?
+        .build_tree(&pool)
+        .await
+        .map_err(error_500)
+    {
+        Ok(tree) => tree.as_html().await.map_err(error_500)?,
         Err(_) => html! {
             "Artist not found: "(artist)
-            p { (html::link("/", "Home")) }
+            p { (html::link("/artists", "Return")) }
         // TODO: redirect to artist search
         // https://www.last.fm/api/show/artist.search
         },
