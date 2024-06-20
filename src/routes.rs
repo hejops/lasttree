@@ -194,30 +194,37 @@ async fn get_charts() -> actix_web::Result<Markup> {
     // arguably, we don't need to cache this
     let chart = charts::week().await.map_err(error_500)?;
 
-    let user = LASTFM_USER.as_str();
-    let library_link = |user, artist| {
-        format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
-    };
+    // let user = LASTFM_USER.as_str();
+    // let library_link = |user: &str, artist: &str| {
+    //     format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
+    // };
 
     // println!("{:#?}", chart);
 
     let html = html! {
         (html::header("Top artists"))
         table {
+
             th {"#"}
             th {"Artist"}
             th {"Plays"}
             @for artist in chart.artists {
                 @let name = artist.name;
-                @let link = library_link(user, name.clone());
+                // @let link = library_link(user, name.clone());
                 @let link = format!("/artists/{name}");
-                @let cols=vec![
+                @let cols = vec![
                     artist.rank.to_string(),
                     (html::link(&link, &name).into()),
                     artist.playcount.to_string(),
                 ];
                 (html::table_row(cols))
             }
+
+            // @for (c, _) in cols.iter() { th { (c) } }
+            // @for artist in artists {
+            //     (table_row(cols.iter().map(|x| (x.1)(artist)).collect()))
+            // }
+
             // TODO: final row to load next page
         }
     };

@@ -80,7 +80,7 @@ pub async fn week() -> anyhow::Result<Chart> {
 }
 
 pub async fn overall() {
-    let url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json",
+    let _url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json",
         *LASTFM_USER,
         *LASTFM_KEY
     );

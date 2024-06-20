@@ -59,6 +59,7 @@ pub fn header(page_title: &str) -> Markup {
 }
 
 /// <tr><td>
+// pub fn table_row(cols: Vec<Markup>) -> Markup {
 pub fn table_row(cols: Vec<String>) -> Markup {
     html! {
         tr {
@@ -96,11 +97,13 @@ impl ArtistTree {
         // row order must be independent of graph node order
         // TODO: sort table (frontend)
         let mut artists: Vec<&String> = self.nodes.keys().filter(|n| **n != self.root).collect();
-        if true {
-            artists.sort_by_key(|a| -self.get_child_similarity(a));
-        } else {
-            artists.sort()
-        };
+        artists.sort_by_key(|a| -self.get_child_similarity(a));
+
+        // if true {
+        //     artists.sort_by_key(|a| -self.get_child_similarity(a));
+        // } else {
+        //     artists.sort()
+        // };
 
         // Note that the normal pattern of POST/redirect/GET, which is needed to avoid
         // problems with page refresh and form re-submission, is not needed in
@@ -110,7 +113,10 @@ impl ArtistTree {
         //
         // importantly, this means that we don't have to create a "spare" GET endpoint,
         // and users are never exposed to it
-        let yt_button = |query| {
+        // https://htmx.org/examples/active-search/
+        // https://htmx.org/attributes/hx-swap/
+        // let yt_button = |query| {
+        fn yt_button(query: &str) -> Markup {
             html! {
                 button
                     hx-post={"/youtube/"(encode(query))}
@@ -121,42 +127,61 @@ impl ArtistTree {
                     hx-indicator=".htmx-indicator"
                 { "YouTube" }
             }
-        };
+        }
 
         // TODO: right align Similarity values (but not header)
         // https://stackoverflow.com/a/1332648
 
-        // // https://stackoverflow.com/a/49012896
-        // // TODO: could use a [(String (col), fn)] to generate table
-        // let cols = vec![
-        //     //
-        //     // ("Similarity", |artist| self.get_child_similarity(artist)),
-        //     (
-        //         "Artist",
-        //         Box::new(|artist| link(&format!("/artists/{}", encode(artist)),
-        // artist))             as Box<dyn Fn(&str) -> Markup>,
-        //     ),
-        //     // (
-        //     //     "Links",
-        //     //     Box::new(|artist| link(&format!("https://last.fm/music/{artist}"), "Last.fm")),
-        //     // ),
-        // ];
+        // https://stackoverflow.com/a/49012896
+        // https://users.rust-lang.org/t/closure-lifetime-issue-cast-requires-1-must-outlive-static/84247/2
+        // use a [(&str, fn)] to generate table, though this requires a bit of lifetime
+        // gymnastics
+        type ColumnGenerator<'a> = (&'a str, Box<dyn Fn(&str) -> String + 'a>);
+        let cols: Vec<ColumnGenerator> = vec![
+            (
+                "Similarity",
+                Box::new(|artist| self.get_child_similarity(artist).to_string()),
+            ),
+            (
+                "Artist",
+                Box::new(|artist| {
+                    link(&format!("/artists/{}", encode(artist)), artist).into_string()
+                }),
+            ),
+            (
+                "Links",
+                Box::new(|artist| {
+                    format!(
+                        "{} {}",
+                        link(&format!("https://last.fm/music/{artist}"), "Last.fm").into_string(),
+                        yt_button(artist).into_string(),
+                    )
+                }),
+            ),
+        ];
 
         let table = html! {
             table {
-                th { "Similarity" }
-                th { "Artist" }
-                th { "Links" }
+
+                // th { "Similarity" }
+                // th { "Artist" }
+                // th { "Links" }
+                // @for artist in artists {
+                //     @let cols = vec![
+                //         self.get_child_similarity(artist).to_string(),
+                //         link(&format!("/artists/{}", encode(artist)), artist).into(),
+                //         (format!("{} {}",
+                //             link(&format!("https://last.fm/music/{artist}"), "Last.fm").into_string(),
+                //             yt_button(artist).into_string(),
+                //         ))
+                //     ];
+                // }
+
+                @for (c, _) in cols.iter() { th { (c) } }
                 @for artist in artists {
-                    @let cols = vec![
-                        self.get_child_similarity(artist).to_string(),
-                        link(&format!("/artists/{}", encode(artist)), artist).into(),
-                        (format!("{} {}",
-                            link(&format!("https://last.fm/music/{artist}"), "Last.fm").into_string(),
-                            yt_button(artist).into_string(),
-                        ))
-                    ];
-                    (table_row(cols))
+                    // @let cols: Vec<Markup> = cols.iter().map(|x| &x.1).map(|f| f(artist)).collect();
+                    // @let cols = cols.iter().map(|x| (x.1)(artist));
+                    (table_row(cols.iter().map(|x| (x.1)(artist)).collect()))
                 }
             }
         };
@@ -194,6 +219,7 @@ impl ArtistTree {
 
 #[cfg(test)]
 mod tests {
+
     use crate::html::get_lastfm_url;
     use crate::html::table_row;
 
@@ -207,8 +233,8 @@ mod tests {
             r#"<a href="https://last.fm/music/loona">loona</a>"#
         );
 
-        let cols = vec!["1".to_string(), link.into_string()];
-        let row = table_row(cols);
+        let cols = ["1".to_string(), link.into_string()];
+        let row = table_row(cols.to_vec());
         assert_eq!(
             row.into_string(),
             r#"<tr><td>1</td><td><a href="https://last.fm/music/loona">loona</a></td></tr>"#

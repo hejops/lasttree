@@ -186,8 +186,6 @@ impl ArtistTree {
 #[cfg(test)]
 mod tests {
 
-    use itertools::Itertools;
-
     use super::ArtistTree;
     use crate::tests::init_test_artist;
     use crate::tests::TestPool;
