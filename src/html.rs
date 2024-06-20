@@ -52,7 +52,7 @@ pub fn link(
 
 pub fn header(page_title: &str) -> Markup {
     html! {
-        title { (APP_NAME.to_string())" - "(page_title) }
+        title { (APP_NAME.as_str())" - "(page_title) }
         (link("/", "Home"))
         h2 { (page_title) }
     }
@@ -60,6 +60,8 @@ pub fn header(page_title: &str) -> Markup {
 
 /// <tr><td>
 // pub fn table_row(cols: Vec<Markup>) -> Markup {
+// arg should be Vec<String>, not Vec<Markup>; Markup -> String is easy, while
+// String -> Markup is more tedious
 pub fn table_row(cols: Vec<String>) -> Markup {
     html! {
         tr {

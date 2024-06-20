@@ -246,12 +246,21 @@ async fn search_youtube(
 
     // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio#usage_notes
 
-    let audio = crate::player::search_youtube(&query).await.unwrap();
-    let html = html! {
-        p {}
-        audio controls autoplay
-            { source src=(audio.link) { } }
-        p { (audio.title) }
+    let html = match crate::player::search_youtube(&query).await {
+        Ok(audio) => html! {
+            p {}
+            audio controls autoplay
+                { source src=(audio.link) { } }
+            p { (audio.title) }
+        },
+        Err(e) => html! {
+            p {}
+            (e)
+            p {}
+            "Try searching on "
+            (html::link(&format!("https://www.youtube.com/search?q={query}"), "YouTube"))
+            "."
+        },
     };
 
     Ok(html)

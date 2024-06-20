@@ -27,12 +27,13 @@ pub struct YoutubeAudio {
 }
 
 pub async fn search_youtube(query: &str) -> anyhow::Result<YoutubeAudio> {
-    let opts = SearchOptions::youtube(query).with_count(3);
+    let n = 5;
+    let opts = SearchOptions::youtube(query).with_count(n);
     let results = YoutubeDl::search_for(&opts)
         .run_async()
         .await?
         .into_playlist()
-        .context("no search results")?
+        .context(format!("No search results for {query}."))?
         .entries
         .context("'entries' field empty")?;
 
@@ -44,7 +45,7 @@ pub async fn search_youtube(query: &str) -> anyhow::Result<YoutubeAudio> {
                 .unwrap()
                 .contains(&Some("Music".to_owned()))
         })
-        .context("no search results")?;
+        .context(format!("No audio in first {n} results for {query}."))?;
 
     get_youtube_audio_link(first.clone()).await
 }
