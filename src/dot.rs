@@ -75,12 +75,7 @@ mod tests {
     async fn basic_styling() {
         // TODO: remove network requirement?
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let a = ArtistTree::new("loona")
-            .await
-            .unwrap()
-            .build_tree(pool)
-            .await
-            .unwrap();
+        let a = ArtistTree::new("loona").build_tree(pool).await.unwrap();
 
         let dot = a.as_dot().print(&mut PrinterContext::default());
         println!("{:?}", dot);

@@ -46,10 +46,5 @@ pub async fn init_test_artist(
     key: Option<&str>,
 ) -> ArtistTree {
     let pool = &TestPool::new(key).await.pool;
-    ArtistTree::new(name)
-        .await
-        .unwrap()
-        .build_tree(pool)
-        .await
-        .unwrap()
+    ArtistTree::new(name).build_tree(pool).await.unwrap()
 }

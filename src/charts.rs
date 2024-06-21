@@ -66,6 +66,8 @@ where
     }
 }
 
+// TODO: charts should be displayed as tabs (1 for each timeframe)
+
 pub async fn week() -> anyhow::Result<Chart> {
     let url = format!(
         "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&format=json",//&limit=3",

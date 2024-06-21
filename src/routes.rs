@@ -123,15 +123,14 @@ async fn show_artist(
     let artist = path.into_inner();
 
     let html = match ArtistTree::new(&artist)
-        .await
-        .map_err(error_500)?
         .build_tree(&pool)
         .await
         .map_err(error_500)
     {
         Ok(tree) => tree.as_html().await.map_err(error_500)?,
-        Err(_) => html! {
-            "Artist not found: "(artist)
+        Err(e) => html! {
+            // "Artist not found: "(artist)
+            (e)
             p { (html::link("/artists", "Return")) }
         // TODO: try artist search, then show results in list
         // https://www.last.fm/api/show/artist.search
@@ -271,21 +270,35 @@ mod tests {
     use wiremock::MockServer;
     use wiremock::ResponseTemplate;
 
+    use crate::init_server;
+    use crate::tests::TestPool;
+
     #[tokio::test]
     async fn show_artist() {
-        let mock_server = MockServer::start().await;
+        let db_url = &TestPool::new(None).await.path;
+        let port = 2020;
+        let server = init_server(db_url, port).unwrap();
 
-        Mock::given(method("GET"))
+        // don't await the server, otherwise it will listen for incoming requests
+        // indefinitely -- i.e., like a real server! instead, put it in a tokio thread,
+        // which (somehow) terminates the server after the end of the scope
+        tokio::spawn(server);
+
+        let _ = Mock::given(method("GET"))
             .and(path("/artists/loona"))
             .respond_with(ResponseTemplate::new(200))
-            .expect(1)
-            .mount(&mock_server)
-            .await;
+            .expect(1);
 
-        let resp = reqwest::get(format!("{}/artists/loona", mock_server.uri()))
+        // TODO: for ergonomics, we should wrap both TestPool and Server into a single
+        // struct
+        let addr = format!("http://localhost:{port}");
+
+        let resp = reqwest::get(format!("{}/artists/loona", addr))
             .await
             .unwrap();
+
         assert_eq!(resp.status(), 200);
+        assert!(resp.text().await.unwrap().contains("No API key"));
     }
 
     #[tokio::test]
