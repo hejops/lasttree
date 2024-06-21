@@ -109,7 +109,10 @@ impl ArtistTree {
                     .get_similar_artists(pool)
                     .await?;
 
-                for (c, sim) in map.iter().filter(|x| *x.1 >= 70) {
+                for (c, sim) in map
+                    .iter()
+                    .filter(|x| *x.1 >= ((self.threshold * 100.0) as u32).into())
+                {
                     let n1 = match self.nodes.get(&parent) {
                         Some(node) => *node,
                         None => self.graph.add_node(parent.clone()),
