@@ -6,6 +6,11 @@ CREATE TABLE IF NOT EXISTS artist_pairs(
 	-- child_lower TEXT NOT NULL,
 	-- similarity NUMERIC(1,2) NOT NULL,
 	similarity INTEGER NOT NULL,
+
+	date_added TEXT NOT NULL,
+
+	-- PRIMARY KEY must always be specified last (else syntax error!)
 	-- PRIMARY KEY (parent_lower, child_lower)
 	PRIMARY KEY (parent, child)
 );
+

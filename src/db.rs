@@ -12,7 +12,7 @@ pub type SqPool = Pool<Sqlite>;
 
 // TODO: seed db with the 25 most popular artists of a given genre
 
-pub fn init_db(db_url: &str) -> anyhow::Result<SqPool> {
+pub fn init_db(db_url: &str) -> sqlx::Result<SqPool> {
     // to enable `sqlx migrate run`, ensure sqlx-cli is installed with the
     // appropriate feature: cargo install sqlx-cli -F rustls,postgres,sqlite[,...]
 
@@ -37,7 +37,7 @@ impl ArtistTree {
     pub async fn canonical_name(
         &self,
         pool: &Pool<Sqlite>,
-    ) -> anyhow::Result<Option<String>> {
+    ) -> sqlx::Result<Option<String>> {
         let lower = self.root.to_lowercase();
         let row = sqlx::query!(
             r#"
@@ -55,7 +55,7 @@ impl ArtistTree {
     pub async fn store(
         &self,
         pool: &Pool<Sqlite>,
-    ) -> anyhow::Result<()> {
+    ) -> sqlx::Result<()> {
         let lower = self.root.to_lowercase();
         sqlx::query!(
             r#"
@@ -73,7 +73,7 @@ impl ArtistTree {
     pub async fn get_artist_pairs(
         &self,
         pool: &Pool<Sqlite>,
-    ) -> anyhow::Result<Vec<ArtistPair>> {
+    ) -> sqlx::Result<Vec<ArtistPair>> {
         let name = self.canonical_name(pool).await?;
 
         let mut pairs: Vec<ArtistPair> = sqlx::query!(
@@ -111,7 +111,7 @@ impl ArtistTree {
     pub async fn get_cached_similar_artists(
         &self,
         pool: &SqPool,
-    ) -> anyhow::Result<IndexMap<String, i64>> {
+    ) -> sqlx::Result<IndexMap<String, i64>> {
         let mut map = IndexMap::new();
         for pair in self.get_artist_pairs(pool).await? {
             map.insert(pair.child, pair.similarity);
@@ -127,7 +127,7 @@ impl ArtistTree {
         child: &str,
         similarity: f64,
         pool: &Pool<Sqlite>,
-    ) -> anyhow::Result<()> {
+    ) -> sqlx::Result<()> {
         let sim_int = (similarity * 100.0) as u32;
         sqlx::query!(
             r#"
@@ -135,9 +135,10 @@ impl ArtistTree {
             (
                 parent, -- parent_lower,
                 child, -- child_lower,
-                similarity
+                similarity,
+                date_added
             )
-            VALUES ($1, $2, $3)
+            VALUES ($1, $2, $3, date())
         "#,
             self.root,
             child,
@@ -150,7 +151,10 @@ impl ArtistTree {
     }
 } //}}}
 
-pub async fn get_api_key(pool: &Pool<Sqlite>) -> anyhow::Result<Option<String>> {
+// {{{
+// if self-hosting, a single api key is enough, and we don't need a proper
+// login/authentication procedure
+pub async fn get_api_key(pool: &Pool<Sqlite>) -> sqlx::Result<Option<String>> {
     let row = sqlx::query!(
         r#"
         SELECT key FROM api_key
@@ -191,7 +195,8 @@ pub async fn store_api_key(
     Ok(())
 }
 
-pub async fn delete_api_key(pool: &Pool<Sqlite>) -> anyhow::Result<()> {
+pub async fn delete_api_key(pool: &Pool<Sqlite>) -> sqlx::Result<()> {
     sqlx::query!("DELETE FROM api_key",).execute(pool).await?;
     Ok(())
 }
+//}}}
