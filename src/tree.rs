@@ -1,3 +1,9 @@
+// the graph was initially implemented as a naive Vec<String> + Vec<(usize,
+// usize)> -- see https://github.com/eliben/code-for-blog/blob/master/2021/rust-bst/src/nodehandle.rs.
+// eventually i found Vec indexing really annoying, and switched over to an
+// "edge-only" Vec<Edge>. then i also found -that- ugly, and switched to a
+// HashMap.
+
 use std::fmt::Debug;
 use std::fmt::Display;
 
@@ -8,6 +14,7 @@ use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::NodeIndexable;
 
+// use crate::artists::LastfmError;
 use crate::SqPool;
 
 /// Convert arbitrary error types to `actix_web::Error` with HTTP 500. Note
@@ -43,23 +50,20 @@ pub struct ArtistTree {
 
 impl ArtistTree {
     /// Defaults to `threshold` 0.7, `depth` 2
-    pub async fn new(root: &str) -> anyhow::Result<Self> {
+    pub fn new(root: &str) -> Self {
         let root = root.to_string();
         let nodes = IndexMap::new();
         let threshold = 0.7;
         let depth = 2;
 
         // let mut tree = Self {
-        let tree = Self {
+        Self {
             root,
             nodes,
             threshold,
             depth,
             graph: Graph::new(),
-        };
-
-        // tree.build_graph(pool).await?;
-        Ok(tree)
+        }
     }
 
     // fn with_threshold(
@@ -104,10 +108,13 @@ impl ArtistTree {
             };
 
             for parent in parents {
-                let map = ArtistTree::new(&parent)
-                    .await?
-                    .get_similar_artists(pool)
-                    .await?;
+                // let map = ArtistTree::new(&parent).get_similar_artists(pool).await?;
+
+                // deal with LastmError variants here (instead of ?)
+                let map = match ArtistTree::new(&parent).get_similar_artists(pool).await {
+                    Ok(m) => m,
+                    Err(e) => return Err(anyhow::anyhow!(e)),
+                };
 
                 for (c, sim) in map
                     .iter()
@@ -243,12 +250,7 @@ mod tests {
     #[tokio::test]
     async fn child_similarity() {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let tree = ArtistTree::new("metallica")
-            .await
-            .unwrap()
-            .build_tree(pool)
-            .await
-            .unwrap();
+        let tree = ArtistTree::new("metallica").build_tree(pool).await.unwrap();
         let sim = tree.get_child_similarity("Annihilator");
         // this number is not fixed!
         assert!((50..=55).contains(&sim));

@@ -4,7 +4,8 @@
 
 use std::f64;
 
-use anyhow::Context;
+use actix_web::http::StatusCode;
+use actix_web::ResponseError;
 use indexmap::IndexMap;
 use serde::de;
 use serde::Deserialize;
@@ -60,6 +61,41 @@ fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Erro
     })
 }
 
+// https://github.com/freedomofpress/securedrop/blob/5733557ffa98f03fc9eeb8b3ff763a661ee2875f/redwood/src/lib.rs#L29
+
+// `thiserror::Error` provides `Display` (via `error`), `Error::source` (via
+// `source`) and `From` (via `from`). `from` implements -both- `From` and
+// `Error::source`
+#[derive(thiserror::Error, Debug)]
+pub enum LastfmError {
+    #[error("No API key")]
+    NoApiKey,
+
+    // variant(#[from] module::Error) enables ?
+    // but error types must be unique!
+
+    // #[error("Not found {0}")]
+    // ParseError(String),
+    #[error("Not found")]
+    ParseError(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    DatabaseError(#[from] sqlx::Error),
+
+    #[error(transparent)]
+    NetworkError(#[from] reqwest::Error),
+}
+
+impl ResponseError for LastfmError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::NoApiKey => StatusCode::UNAUTHORIZED,
+            Self::ParseError(_) => StatusCode::NOT_FOUND, // TODO: is there a better code?
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
 impl ArtistTree {
     /// Important: a Last.fm API key is required
     ///
@@ -76,13 +112,14 @@ impl ArtistTree {
     pub async fn get_similar_artists(
         &mut self,
         pool: &SqPool,
-    ) -> anyhow::Result<IndexMap<String, i64>> {
+        // ) -> anyhow::Result<IndexMap<String, i64>> {
+    ) -> Result<IndexMap<String, i64>, LastfmError> {
         if self.canonical_name(pool).await?.is_some() {
             let cached = self.get_cached_similar_artists(pool).await?;
             return Ok(cached);
         }
 
-        let key = get_api_key(pool).await?.context("no api key found")?;
+        let key = get_api_key(pool).await?.ok_or(LastfmError::NoApiKey)?;
 
         let url = format!(
             "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json",
@@ -90,6 +127,8 @@ impl ArtistTree {
             // *LASTFM_KEY
             key,
     );
+
+        // TODO: NotFound variant is somewhere here...
 
         // String -> Value -> struct
         let resp = reqwest::get(url).await?.text().await?;
@@ -129,7 +168,7 @@ mod tests {
         children: &[&str],
     ) {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let mut artist = ArtistTree::new(parent).await.unwrap();
+        let mut artist = ArtistTree::new(parent);
 
         let retrieved = artist.get_similar_artists(pool).await.unwrap();
         assert_eq!(retrieved.len(), 100);
@@ -150,7 +189,7 @@ mod tests {
     #[tokio::test]
     async fn no_key() {
         let pool = &TestPool::new(None).await.pool;
-        let mut artist = ArtistTree::new("loona").await.unwrap();
+        let mut artist = ArtistTree::new("loona");
 
         assert!(get_api_key(pool).await.unwrap().is_none());
 
@@ -161,7 +200,7 @@ mod tests {
     #[tokio::test]
     async fn invalid_key() {
         let pool = &TestPool::new(Some("foo")).await.pool;
-        let mut artist = ArtistTree::new("loona").await.unwrap();
+        let mut artist = ArtistTree::new("loona");
 
         assert!(get_api_key(pool).await.unwrap().is_none());
 
@@ -201,7 +240,7 @@ mod tests {
     async fn cached_result() {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
 
-        let mut artist = ArtistTree::new("loona").await.unwrap();
+        let mut artist = ArtistTree::new("loona");
 
         // TODO: test that only 1 (?) http request made -- Mock seems unsuitable, since
         // it tests requests made to our (mocked) server. we want to check the
