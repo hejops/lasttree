@@ -44,6 +44,18 @@ lazy_static::lazy_static! {
     );
 }
 
+/// To start the server:
+/// ```no_run
+/// use lasttree::init_server;
+///
+/// # tokio_test::block_on(async {
+/// let server = init_server("db_url", 7777).unwrap();
+/// server.await.unwrap(); // in production
+///
+/// let server = init_server("db_url", 7777).unwrap();
+/// tokio::spawn(server); // in test
+/// # })
+/// ```
 pub fn init_server(
     db_url: &str,
     port: u16,
