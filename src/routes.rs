@@ -208,6 +208,17 @@ async fn get_charts_default() -> impl Responder {
     redirect(&format!("/charts/{}", *LASTFM_USER)).await
 }
 
+#[derive(Deserialize)]
+struct ChartFormData {
+    user: String,
+}
+
+#[post("/charts")]
+async fn post_charts(form: web::Form<ChartFormData>) -> impl Responder {
+    let path = format!("/charts/{}", form.0.user);
+    redirect(&path).await
+}
+
 #[get("/charts/{user}")]
 async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
     let user = &path.user;
@@ -218,9 +229,28 @@ async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
     };
 
     // println!("{:#?}", chart);
+    // println!("get_charts: {}", user);
 
     let html = html! {
         (html::header(&format!("Top artists for {user}")))
+
+        form
+            method="POST"
+            action="/charts"
+            {
+
+            label { "Search user: "
+                input
+                    required
+                    type="text"
+                    autofocus="true"
+                    name="user"
+                    { }
+
+                button type="submit" { "Search" }
+            }
+        }
+
         table {
 
             th {"#"}
