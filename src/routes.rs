@@ -40,8 +40,8 @@ async fn home() -> actix_web::Result<Markup> {
         ul {
             // note the trailing slashes!
             li { (html::link("/artists/", "Artists")) }
-            // li { (html::link("/genres", "Genres")) }
             li { (html::link("/charts/", "Charts")) }
+            // li { (html::link("/genres", "Genres")) }
         }
         // div class="spacer" {}
         // footer {
@@ -200,11 +200,11 @@ struct ChartsPath {
     // period: String,
 }
 
-/// Redirect `/charts/` -> `/charts/{default_user}/{period}`
+/// Redirect `/charts/` -> `/charts/{default_user}`
 // https://github.com/actix/actix-web/discussions/2874#discussioncomment-3647031
 #[get("/charts/")]
 async fn get_charts_null() -> impl Responder {
-    redirect(&format!("/charts/{}/{}", *LASTFM_USER, Period::default())).await
+    redirect(&format!("/charts/{}/", *LASTFM_USER)).await
 }
 
 /// Redirect `/charts/{user}` -> `/charts/{user}/{period}`
@@ -228,7 +228,7 @@ async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
 
     let chart = User::new(user)
         .map_err(error_500)?
-        .overall(period)
+        .get_chart_period(period)
         .await
         .map_err(error_500)?;
 

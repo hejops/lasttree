@@ -21,7 +21,9 @@ pub struct User {
 pub struct Chart {
     #[serde(rename = "artist")]
     artists: Vec<ChartArtist>,
-    // period: Period,
+
+    #[serde(skip)]
+    period: Period,
 }
 
 #[derive(Deserialize, Debug)]
@@ -64,13 +66,18 @@ impl Chart {
 
         let periods = html! {
             @for p in Period::iter() {
-                (html::link(&format!("/charts/{user}/{p}"), &p.to_string()))
+                @if p == self.period {
+                    b { (p) }
+                } @else {
+                    (html::link(&format!("/charts/{user}/{p}"), &p.to_string()))
+                }
                 " "
             }
         };
 
         let html = html! {
             (html::header(&format!("Top artists for {user}")))
+            // TODO: total scrobbles
 
             form //{{{
                 method="POST"
@@ -104,6 +111,7 @@ impl Chart {
                         artist.rank.to_string(),
                         (html::link(&link, name).into()),
                         artist.playcount.to_string(),
+                        // TODO: as % of total
                     ];
                     (html::table_row(cols))
                 }
@@ -164,15 +172,15 @@ where
 }
 //}}}
 
-#[derive(Debug, strum_macros::EnumIter)]
+#[derive(Debug, PartialEq, strum_macros::EnumIter)]
 pub enum Period {
     //{{{
-    Overall,
     Week,
     Month,
     Quarter,
     Half,
     Year,
+    Overall,
 }
 
 impl Default for Period {
@@ -225,13 +233,14 @@ impl User {
         Ok(user)
     }
 
-    pub async fn overall(
+    /// Get an artist chart constrained to one of six fixed time periods, as
+    /// defined by last.fm (see `Period` for more details).
+    ///
+    /// https://www.last.fm/api/show/user.getTopArtists
+    pub async fn get_chart_period(
         &self,
         period: Period,
     ) -> anyhow::Result<Chart> {
-        // https://www.last.fm/api/show/user.getWeeklyArtistChart -- week, or custom start+end
-        // https://www.last.fm/api/show/user.getTopArtists -- allows fixed periods
-
         let url = format!(
         // "http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json&limit=3",
         "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&period={period}&format=json",//&limit=3",
@@ -241,11 +250,19 @@ impl User {
         let json = reqwest::get(url).await?.text().await?;
         let json: Value = serde_json::from_str(&json)?;
         // println!("{:#?}", json);
-        let chart = serde_json::from_value(json["topartists"].clone())?;
+        let mut chart: Chart = serde_json::from_value(json["topartists"].clone())?;
+
+        // chart.set_period(period);
+        chart.period = period;
+
         Ok(chart)
     }
 
-    pub async fn weekly(&self) {
+    /// Unlike `get_chart_period`, this allows a custom window, as specified by
+    /// 2 timestamps
+    ///
+    /// https://www.last.fm/api/show/user.getWeeklyArtistChart
+    pub async fn get_chart_window(&self) {
         let _url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json",
         self.username,
         *LASTFM_KEY
@@ -263,7 +280,7 @@ mod tests {
         // let ch = crate::charts::overall(&LASTFM_USER, None).await.unwrap();
         let ch = User::new(&LASTFM_USER)
             .unwrap()
-            .overall(crate::charts::Period::Week)
+            .get_chart_period(crate::charts::Period::Week)
             .await
             .unwrap();
         assert_eq!(ch.artists.first().unwrap().rank, 1);
