@@ -11,14 +11,21 @@ use strum::IntoEnumIterator;
 use crate::html;
 use crate::LASTFM_KEY;
 
-#[derive(Deserialize, Debug)]
-pub struct Chart {
-    #[serde(rename = "artist")]
-    pub artists: Vec<ChartArtist>,
+// TODO: unify User and Chart structs?
+
+pub struct User {
+    username: String,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ChartArtist {
+pub struct Chart {
+    #[serde(rename = "artist")]
+    artists: Vec<ChartArtist>,
+    // period: Period,
+}
+
+#[derive(Deserialize, Debug)]
+struct ChartArtist {
     pub name: String,
 
     #[serde(deserialize_with = "str_to_u64")]
@@ -35,28 +42,30 @@ impl Chart {
         &self,
         user: &str,
     ) -> actix_web::Result<Markup> {
-        // TODO: charts should be displayed as tabs (1 for each period), or dropdown
+        // let library_link = |user: &str, artist: &str| {
+        //     format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
+        // };
 
-        // <div>
-        //     <label >Make</label>
-        //     <select name="make" hx-get="/models" hx-target="#models"
-        // hx-indicator=".htmx-indicator">       <option value="audi">Audi</option>
-        //       <option value="toyota">Toyota</option>
-        //       <option value="bmw">BMW</option>
-        //     </select>
-        //   </div>
-        let dropdown = html! {
-            div {
-                label { "Period" }
-                select
-                    name=""
-                    hx-get=""
-                    {
-                        @for p in Period::iter() {
-                            option value=(p) { (p) }
-                        }
+        // // dropdown redirect requires js, and i don't like the UX anyway
+        // // https://stackoverflow.com/questions/7231157
+        // let dropdown = html! {
+        //     div {
+        //         label { "Period " }
+        //         select
+        //             name=""
+        //             hx-get=""
+        //             {
+        //                 @for p in Period::iter() {
+        //                     option value=(p) { (p) }
+        //                 }
+        //         }
+        //     }
+        // };
 
-                }
+        let periods = html! {
+            @for p in Period::iter() {
+                (html::link(&format!("/charts/{user}/{p}"), &p.to_string()))
+                " "
             }
         };
 
@@ -78,7 +87,9 @@ impl Chart {
                 }
             }//}}}
 
-            (dropdown)
+            // TODO: htmx tabs?
+            // (dropdown)
+            (periods)
 
             table {
 
@@ -110,7 +121,7 @@ impl Chart {
     }
 }
 
-//{{{
+// deserializers {{{
 fn str_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
@@ -153,14 +164,35 @@ where
 }
 //}}}
 
-#[derive(strum_macros::EnumIter)]
+#[derive(Debug, strum_macros::EnumIter)]
 pub enum Period {
+    //{{{
     Overall,
     Week,
     Month,
     Quarter,
     Half,
     Year,
+}
+
+impl Default for Period {
+    fn default() -> Self { Self::Overall }
+}
+
+impl TryFrom<&str> for Period {
+    type Error = String;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let p = match value {
+            "7day" => Self::Week,
+            "1month" => Self::Month,
+            "3month" => Self::Quarter,
+            "6month" => Self::Half,
+            "12month" => Self::Year,
+            "overall" => Self::Overall,
+            _ => return Err(format!("Invalid: {value}")),
+        };
+        Ok(p)
+    }
 }
 
 impl Display for Period {
@@ -182,10 +214,7 @@ impl Display for Period {
         )
     }
 }
-
-pub struct User {
-    username: String,
-}
+//}}}
 
 impl User {
     pub fn new(username: &str) -> anyhow::Result<Self> {
@@ -197,13 +226,12 @@ impl User {
     }
 
     pub async fn overall(
-        // username: &str,
         &self,
-        period: Option<Period>,
+        period: Period,
     ) -> anyhow::Result<Chart> {
-        let period = period.unwrap_or(Period::Overall);
         // https://www.last.fm/api/show/user.getWeeklyArtistChart -- week, or custom start+end
         // https://www.last.fm/api/show/user.getTopArtists -- allows fixed periods
+
         let url = format!(
         // "http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json&limit=3",
         "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&period={period}&format=json",//&limit=3",
@@ -212,16 +240,17 @@ impl User {
     );
         let json = reqwest::get(url).await?.text().await?;
         let json: Value = serde_json::from_str(&json)?;
-        println!("{:#?}", json);
+        // println!("{:#?}", json);
         let chart = serde_json::from_value(json["topartists"].clone())?;
         Ok(chart)
     }
-}
 
-pub async fn weekly(user: &str) {
-    let _url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={user}&api_key={}&format=json",
+    pub async fn weekly(&self) {
+        let _url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json",
+        self.username,
         *LASTFM_KEY
     );
+    }
 }
 
 #[cfg(test)]
@@ -234,7 +263,7 @@ mod tests {
         // let ch = crate::charts::overall(&LASTFM_USER, None).await.unwrap();
         let ch = User::new(&LASTFM_USER)
             .unwrap()
-            .overall(None)
+            .overall(crate::charts::Period::Week)
             .await
             .unwrap();
         assert_eq!(ch.artists.first().unwrap().rank, 1);

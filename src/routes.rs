@@ -7,6 +7,7 @@ use maud::html;
 use maud::Markup;
 use serde::Deserialize;
 
+use crate::charts::Period;
 use crate::charts::User;
 use crate::error_500;
 use crate::get_api_key;
@@ -37,9 +38,10 @@ async fn home() -> actix_web::Result<Markup> {
         h1 { (APP_NAME.to_string()) }
         h2 { "Home" }
         ul {
-            li { (html::link("/artists", "Artists")) }
+            // note the trailing slashes!
+            li { (html::link("/artists/", "Artists")) }
             // li { (html::link("/genres", "Genres")) }
-            li { (html::link("/charts/", "Charts")) } // note the trailing slash!
+            li { (html::link("/charts/", "Charts")) }
         }
         // div class="spacer" {}
         // footer {
@@ -65,7 +67,7 @@ async fn login(
     redirect(&form.0.redirect_to).await
 }
 
-#[get("/artists")]
+#[get("/artists/")]
 pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup> {
     // TODO: button for random artist (htmx?)
     // https://github.com/sekunho/emojied/blob/8b08f35ab237eb1d2417e68f92f0337fc7868c1b/src/views/url.rs#L54
@@ -75,11 +77,11 @@ pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup
     let html = html! {
         (html::header("Artists"))
         @if key.is_none() {
-            (html::api_key_form("/artists"))
+            (html::api_key_form("/artists/"))
         } @else {
             form
                 method="POST"
-                action="/artists"
+                action="/artists/"
                 // hx-post={"/artists/"(encode(query))}
                 {
                     label { "Search artist: "
@@ -111,7 +113,7 @@ struct ArtistFormData {
     artist: String,
 }
 
-#[post("/artists")]
+#[post("/artists/")]
 async fn post_artists(form: web::Form<ArtistFormData>) -> impl Responder {
     let path = format!("/artists/{}", form.0.artist);
     redirect(&path).await
@@ -135,7 +137,7 @@ async fn show_artist(
         Err(e) => html! {
             // "Artist not found: "(artist)
             (e)
-            p { (html::link("/artists", "Return")) }
+            p { (html::link("/artists/", "Return")) }
         // TODO: try artist search, then show results in list
         // https://www.last.fm/api/show/artist.search
         },
@@ -190,20 +192,51 @@ async fn show_artist(
 //     Ok(html)
 // }
 
-// TODO: if path has >1 variable component, use a struct
 // https://github.com/GroupTheorist12/SimpleRustWebService/blob/main/cars_service/src/main.rs#L31
-
 #[derive(Deserialize, Debug)]
 struct ChartsPath {
     user: String,
-    // period: Option<String>,
+    period: Option<String>,
+    // period: String,
 }
 
-// /charts -> cached, /charts/{user} -> user
+/// Redirect `/charts/` -> `/charts/{default_user}/{period}`
 // https://github.com/actix/actix-web/discussions/2874#discussioncomment-3647031
 #[get("/charts/")]
-async fn get_charts_default() -> impl Responder {
-    redirect(&format!("/charts/{}", *LASTFM_USER)).await
+async fn get_charts_null() -> impl Responder {
+    redirect(&format!("/charts/{}/{}", *LASTFM_USER, Period::default())).await
+}
+
+/// Redirect `/charts/{user}` -> `/charts/{user}/{period}`
+#[get("/charts/{user}/")]
+async fn get_charts_user(path: web::Path<ChartsPath>) -> impl Responder {
+    redirect(&format!("/charts/{}/{}", path.user, Period::default())).await
+}
+
+#[get("/charts/{user}/{period}")]
+async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
+    let user = &path.user;
+
+    // TODO: silently use default, or show error/warning?
+
+    let period = match &path.period {
+        Some(s) => s.as_str().try_into().unwrap_or(Period::default()),
+        None => Period::default(),
+    };
+
+    // let period = path.period.as_str().try_into().unwrap_or(Period::default());
+
+    let chart = User::new(user)
+        .map_err(error_500)?
+        .overall(period)
+        .await
+        .map_err(error_500)?;
+
+    // println!("{:#?}", chart);
+    // println!("get_charts: {}", user);
+
+    let html = chart.as_html(user)?;
+    Ok(html)
 }
 
 #[derive(Deserialize)]
@@ -213,28 +246,8 @@ struct ChartFormData {
 
 #[post("/charts")]
 async fn post_charts(form: web::Form<ChartFormData>) -> impl Responder {
-    let path = format!("/charts/{}", form.0.user);
+    let path = format!("/charts/{}/", form.0.user);
     redirect(&path).await
-}
-
-#[get("/charts/{user}")]
-async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
-    let user = &path.user;
-    let chart = User::new(user)
-        .map_err(error_500)?
-        .overall(None)
-        .await
-        .map_err(error_500)?;
-
-    // let library_link = |user: &str, artist: &str| {
-    //     format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
-    // };
-
-    // println!("{:#?}", chart);
-    // println!("get_charts: {}", user);
-
-    let html = chart.as_html(user)?;
-    Ok(html)
 }
 
 /// No request body is required.

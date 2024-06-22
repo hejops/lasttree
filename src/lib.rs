@@ -91,7 +91,8 @@ pub fn init_server(
             .service(routes::show_artist)
             // .service(routes::genres)
             .service(routes::get_charts)
-            .service(routes::get_charts_default) // lesser evil?
+            .service(routes::get_charts_user)
+            .service(routes::get_charts_null)
             // TODO: how to get compiler to remind me to use POST routes?
             .service(routes::post_charts)
             // .service(web::resource(["/charts/", "/charts/{user}"]).to(routes::get_charts))
