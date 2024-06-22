@@ -25,6 +25,7 @@ pub struct ChartArtist {
     // url: String,
 }
 
+//{{{
 fn str_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
@@ -65,13 +66,12 @@ where
         _ => Err(de::Error::custom("wrong type")),
     }
 }
+//}}}
 
-// TODO: charts should be displayed as tabs (1 for each timeframe)
-
-pub async fn week() -> anyhow::Result<Chart> {
+pub async fn overall(user: &str) -> anyhow::Result<Chart> {
     let url = format!(
         "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&format=json",//&limit=3",
-        *LASTFM_USER,
+        user,
         *LASTFM_KEY
     );
     let json = reqwest::get(url).await?.text().await?;
@@ -81,7 +81,7 @@ pub async fn week() -> anyhow::Result<Chart> {
     Ok(chart)
 }
 
-pub async fn overall() {
+pub async fn week() {
     let _url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json",
         *LASTFM_USER,
         *LASTFM_KEY
@@ -90,9 +90,11 @@ pub async fn overall() {
 
 #[cfg(test)]
 mod tests {
+    use crate::LASTFM_USER;
+
     #[tokio::test]
     async fn test_week() {
-        let ch = crate::charts::week().await.unwrap();
+        let ch = crate::charts::overall(&LASTFM_USER).await.unwrap();
         assert_eq!(ch.artists.first().unwrap().rank, 1);
     }
 }

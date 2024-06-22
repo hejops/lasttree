@@ -26,7 +26,10 @@ async fn redirect(path: &str) -> impl Responder {
         .finish()
 }
 
-pub async fn not_found() -> impl Responder { redirect("/").await }
+pub async fn not_found() -> impl Responder {
+    // TODO: can we get current path?
+    redirect("/").await
+}
 
 #[get("/")]
 async fn home() -> actix_web::Result<Markup> {
@@ -36,7 +39,7 @@ async fn home() -> actix_web::Result<Markup> {
         ul {
             li { (html::link("/artists", "Artists")) }
             // li { (html::link("/genres", "Genres")) }
-            li { (html::link("/charts", "Charts")) }
+            li { (html::link("/charts/", "Charts")) } // note the trailing slash!
         }
         // div class="spacer" {}
         // footer {
@@ -85,7 +88,8 @@ pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup
                             type="text"
                             value="metallica"
                             autofocus="true"
-                            name="artist" // `name` must correspond to a `Form` field
+                            // value for `name` must correspond to a `Form` field
+                            name="artist"
                             { }
                     button type="submit" { "Search" }
                 }
@@ -186,13 +190,29 @@ async fn show_artist(
 //     Ok(html)
 // }
 
-// TODO: /charts -> cached, /charts/{user} -> user
-#[get("/charts")]
-async fn get_charts() -> actix_web::Result<Markup> {
-    // arguably, we don't need to cache this
-    let chart = charts::week().await.map_err(error_500)?;
+// TODO: if path has >1 variable component, use a struct
+// https://github.com/GroupTheorist12/SimpleRustWebService/blob/main/cars_service/src/main.rs#L31
 
-    let user = LASTFM_USER.as_str();
+#[derive(Deserialize, Debug)]
+struct ChartsPath {
+    user: String,
+    // period: Option<String>,
+}
+
+// TODO: charts should be displayed as tabs (1 for each timeframe)
+
+// /charts -> cached, /charts/{user} -> user
+// https://github.com/actix/actix-web/discussions/2874#discussioncomment-3647031
+#[get("/charts/")]
+async fn get_charts_default() -> impl Responder {
+    redirect(&format!("/charts/{}", *LASTFM_USER)).await
+}
+
+#[get("/charts/{user}")]
+async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
+    let user = &path.user;
+    let chart = charts::overall(user).await.map_err(error_500)?;
+
     let library_link = |user: &str, artist: &str| {
         format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
     };

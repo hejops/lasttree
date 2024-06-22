@@ -35,6 +35,9 @@ lazy_static::lazy_static! {
     static ref LASTFM_KEY: String =
         std::env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
 
+    static ref LASTFM_URL: String =
+        format!("http://ws.audioscrobbler.com/2.0/?format=json&api_key={}", LASTFM_KEY.as_str());
+
     static ref APP_NAME: String = "Last".to_string();
 
     /// A base64 engine used to crudely pass data from one endpoint to another
@@ -88,6 +91,9 @@ pub fn init_server(
             .service(routes::show_artist)
             // .service(routes::genres)
             .service(routes::get_charts)
+            .service(routes::get_charts_default) // lesser evil?
+            // .service(web::resource(["/charts/", "/charts/{user}"]).to(routes::get_charts))
+            // .service(web::resource("/charts/").to(routes::get_charts))
             // auxiliary
             .service(routes::login)
             .service(routes::search_youtube)
