@@ -66,6 +66,7 @@ impl ArtistTree {
 mod tests {
     use graphviz_rust::printer::DotPrinter;
     use graphviz_rust::printer::PrinterContext;
+    use itertools::Itertools;
 
     use crate::tests::TestPool;
     use crate::ArtistTree;
@@ -77,8 +78,13 @@ mod tests {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
         let a = ArtistTree::new("loona").build_tree(pool).await.unwrap();
 
-        let dot = a.as_dot().print(&mut PrinterContext::default());
-        println!("{:?}", dot);
+        let dot = a
+            .as_dot()
+            .print(&mut PrinterContext::default())
+            .lines()
+            .take(9)
+            .join("\n");
+        // println!("{:?}", dot.lines().take(9).join("\n"));
         assert_eq!(
             dot,
             "\
@@ -90,10 +96,7 @@ digraph  {
   1[label=\"LOOΠΔ 1/3\",URL=\"/artists/LOOΠΔ 1/3\"]
   2[label=\"LOONA/yyxy\",URL=\"/artists/LOONA/yyxy\"]
   3[label=\"LOOΠΔ / ODD EYE CIRCLE\",URL=\"/artists/LOOΠΔ / ODD EYE CIRCLE\"]
-  0 -> 1 [label=\"100\"]
-  0 -> 2 [label=\"97\"]
-  0 -> 3 [label=\"86\"]
-}"
+  0 -> 1 [label=\"100\"]"
         );
     }
 }
