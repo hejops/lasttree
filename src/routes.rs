@@ -7,7 +7,7 @@ use maud::html;
 use maud::Markup;
 use serde::Deserialize;
 
-use crate::charts;
+use crate::charts::User;
 use crate::error_500;
 use crate::get_api_key;
 use crate::html;
@@ -199,8 +199,6 @@ struct ChartsPath {
     // period: Option<String>,
 }
 
-// TODO: charts should be displayed as tabs (1 for each timeframe)
-
 // /charts -> cached, /charts/{user} -> user
 // https://github.com/actix/actix-web/discussions/2874#discussioncomment-3647031
 #[get("/charts/")]
@@ -222,61 +220,20 @@ async fn post_charts(form: web::Form<ChartFormData>) -> impl Responder {
 #[get("/charts/{user}")]
 async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
     let user = &path.user;
-    let chart = charts::overall(user).await.map_err(error_500)?;
+    let chart = User::new(user)
+        .map_err(error_500)?
+        .overall(None)
+        .await
+        .map_err(error_500)?;
 
-    let library_link = |user: &str, artist: &str| {
-        format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
-    };
+    // let library_link = |user: &str, artist: &str| {
+    //     format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
+    // };
 
     // println!("{:#?}", chart);
     // println!("get_charts: {}", user);
 
-    let html = html! {
-        (html::header(&format!("Top artists for {user}")))
-
-        form
-            method="POST"
-            action="/charts"
-            {
-
-            label { "Search user: "
-                input
-                    required
-                    type="text"
-                    autofocus="true"
-                    name="user"
-                    { }
-
-                button type="submit" { "Search" }
-            }
-        }
-
-        table {
-
-            th {"#"}
-            th {"Artist"}
-            th {"Plays"}
-            @for artist in chart.artists {
-                @let name = artist.name;
-                // @let link = library_link(user, name.clone());
-                @let link = format!("/artists/{name}");
-                @let cols = vec![
-                    artist.rank.to_string(),
-                    (html::link(&link, &name).into()),
-                    artist.playcount.to_string(),
-                ];
-                (html::table_row(cols))
-            }
-
-            // @for (c, _) in cols.iter() { th { (c) } }
-            // @for artist in artists {
-            //     (table_row(cols.iter().map(|x| (x.1)(artist)).collect()))
-            // }
-
-            // TODO: final row to load next page (hx-swap="afterend")
-            // https://htmx.org/examples/click-to-load/
-        }
-    };
+    let html = chart.as_html(user)?;
     Ok(html)
 }
 
@@ -301,7 +258,7 @@ async fn search_youtube(path: web::Path<String>) -> actix_web::Result<Markup> {
         },
         Err(e) => html! {
             p {}
-            (e)
+            p { (e) }
             p {}
             "Try searching on "
             (html::link(&format!("https://www.youtube.com/search?q={query}"), "YouTube"))
@@ -370,4 +327,5 @@ mod tests {
 }
 
 // TODO: test api key submission (i.e. POST /login)
-// TODO: test that failure to search artist redirects to /artists
+// TODO: test that failure to search artist (no results) redirects to /artists
+// TODO: test artist with no similars -- /artists/ShyGirl

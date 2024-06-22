@@ -198,6 +198,7 @@ impl ArtistTree {
                     "table, th, td { border: 1px solid grey; }"
                 }
                 (header(&format!("Artist: {}", self.root)))
+                // TODO: show artist's tags (with links?)
                 // h1 { (get_lastfm_url(&self.root)) }
                 body {
                     (yt_button(&self.root))
