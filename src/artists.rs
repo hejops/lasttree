@@ -15,12 +15,38 @@ use serde_json::Value;
 use urlencoding::encode;
 
 use crate::get_api_key;
-use crate::ArtistTree;
+use crate::get_json;
 use crate::SqPool;
+use crate::LASTFM_KEY;
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Artist {
+    pub name: String,
+}
+
+impl Artist {
+    pub async fn get_listeners(&self) -> anyhow::Result<u32> {
+        // TODO: get from db
+
+        let url = format!(
+        "http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist={}&api_key={}&format=json",
+        self.name,
+        *LASTFM_KEY
+    );
+        let json = get_json(&url).await?;
+
+        let listeners: String =
+            serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
+
+        // TODO: store
+
+        Ok(listeners.parse()?)
+    }
+}
 
 /// A convenience struct used when iterating over a json array
 #[derive(Deserialize, Debug, Clone)]
-struct Artist {
+pub struct SimilarArtist {
     pub name: String,
 
     /// Deserialized as `f64`, but stored in db as `i64` (since sqlite has no
@@ -29,7 +55,7 @@ struct Artist {
     pub similarity: f64,
 }
 
-impl PartialEq for Artist {
+impl PartialEq for SimilarArtist {
     fn eq(
         &self,
         other: &Self,
@@ -85,7 +111,7 @@ impl ResponseError for LastfmError {
     }
 }
 
-impl ArtistTree {
+impl Artist {
     /// Important: a Last.fm API key is required
     ///
     /// Fetches from db if `artist` has been cached in the `artists` table.
@@ -112,7 +138,7 @@ impl ArtistTree {
 
         let url = format!(
             "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json",
-            encode(&self.root),
+            encode(&self.name),
             // *LASTFM_KEY
             key,
     );
@@ -130,14 +156,14 @@ impl ArtistTree {
         // i would have liked to leave mutation of self to callers, but i'd have to
         // return canon_name in addition to map, leading to an ugly function
         // signature
-        self.root = serde_json::from_value(json["@attr"]["artist"].clone())?;
+        self.name = serde_json::from_value(json["@attr"]["artist"].clone())?;
         self.store(pool).await?;
 
         // let mut map = HashMap::new(); // HashMap uses arbitrary order
         // let mut map = BTreeMap::new(); // BTreeMap always sorts by key
         let mut map = IndexMap::new();
 
-        let similars: Vec<Artist> = serde_json::from_value(json["artist"].clone())?;
+        let similars: Vec<SimilarArtist> = serde_json::from_value(json["artist"].clone())?;
 
         for sim in similars {
             self.store_pair(&sim.name, sim.similarity, pool).await?;
@@ -150,9 +176,9 @@ impl ArtistTree {
 
 #[cfg(test)]
 mod tests {
+    use crate::artists::Artist;
     use crate::get_api_key;
     use crate::tests::TestPool;
-    use crate::ArtistTree;
     use crate::LASTFM_KEY;
 
     async fn check_similars(
@@ -160,7 +186,9 @@ mod tests {
         children: &[&str],
     ) {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let mut artist = ArtistTree::new(parent);
+        let mut artist = Artist {
+            name: parent.to_string(),
+        };
 
         let retrieved = artist.get_similar_artists(pool).await.unwrap();
         assert_eq!(retrieved.len(), 100);
@@ -181,7 +209,9 @@ mod tests {
     #[tokio::test]
     async fn no_key() {
         let pool = &TestPool::new(None).await.pool;
-        let mut artist = ArtistTree::new("loona");
+        let mut artist = Artist {
+            name: "loona".to_string(),
+        };
 
         assert!(get_api_key(pool).await.unwrap().is_none());
 
@@ -192,7 +222,9 @@ mod tests {
     #[tokio::test]
     async fn invalid_key() {
         let pool = &TestPool::new(Some("foo")).await.pool;
-        let mut artist = ArtistTree::new("loona");
+        let mut artist = Artist {
+            name: "loona".to_string(),
+        };
 
         assert!(get_api_key(pool).await.unwrap().is_none());
 
@@ -231,8 +263,9 @@ mod tests {
     #[tokio::test]
     async fn cached_result() {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-
-        let mut artist = ArtistTree::new("loona");
+        let mut artist = Artist {
+            name: "loona".to_string(),
+        };
 
         // TODO: test that only 1 (?) http request made -- Mock seems unsuitable, since
         // it tests requests made to our (mocked) server. we want to check the

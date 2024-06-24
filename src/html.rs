@@ -97,7 +97,7 @@ pub fn spinner() -> Markup {
 impl ArtistTree {
     pub async fn as_html(&self) -> anyhow::Result<Markup> {
         // row order must be independent of graph node order
-        let mut artists: Vec<&String> = self.nodes.keys().filter(|n| **n != self.root).collect();
+        let mut artists: Vec<&String> = self.nodes().filter(|n| **n != self.root).collect();
         artists.sort_by_key(|a| -self.get_child_similarity(a));
 
         // if true {

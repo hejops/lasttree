@@ -8,6 +8,7 @@ use serde::Deserializer;
 use serde_json::Value;
 use strum::IntoEnumIterator;
 
+use crate::artists::Artist;
 use crate::html;
 use crate::LASTFM_KEY;
 
@@ -39,8 +40,19 @@ struct ChartArtist {
     // url: String,
 }
 
+impl ChartArtist {
+    // this is a poor hack to "inherit" a method from another struct
+    async fn get_listeners(&self) -> anyhow::Result<u32> {
+        Artist {
+            name: self.name.clone(),
+        }
+        .get_listeners()
+        .await
+    }
+}
+
 impl Chart {
-    pub fn as_html(
+    pub async fn as_html(
         &self,
         user: &str,
     ) -> actix_web::Result<Markup> {
@@ -103,6 +115,7 @@ impl Chart {
                 th {"#"}
                 th {"Artist"}
                 th {"Plays"}
+                th {"Listeners"}
                 @for artist in &self.artists {
                     @let name = &artist.name;
                     // @let link = library_link(user, name.clone());
@@ -112,6 +125,7 @@ impl Chart {
                         (html::link(&link, name).into()),
                         artist.playcount.to_string(),
                         // TODO: as % of total
+                        artist.get_listeners().await.unwrap_or(0).to_string(),
                     ];
                     (html::table_row(cols))
                 }
@@ -240,12 +254,17 @@ impl User {
     pub async fn get_chart_period(
         &self,
         period: Period,
+        // limit: u16,
     ) -> anyhow::Result<Chart> {
+        let limit = 10;
+
         let url = format!(
         // "http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json&limit=3",
-        "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&period={period}&format=json",//&limit=3",
+        "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&period={period}&format=json&limit={limit}",
         self.username,
         *LASTFM_KEY
+        // TODO:
+        // get_api_key(pool).await?.unwrap(),
     );
         let json = reqwest::get(url).await?.text().await?;
         let json: Value = serde_json::from_str(&json)?;

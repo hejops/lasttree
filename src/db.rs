@@ -6,7 +6,8 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Pool;
 use sqlx::Sqlite;
 
-use crate::ArtistTree;
+use crate::artists::Artist;
+// use crate::ArtistTree;
 
 pub type SqPool = Pool<Sqlite>;
 
@@ -31,14 +32,14 @@ pub struct ArtistPair {
     pub similarity: i64,
 }
 
-impl ArtistTree {
+impl Artist {
     //{{{
     /// Query `artists` table (which is much faster than `artist_pairs`)
     pub async fn canonical_name(
         &self,
         pool: &Pool<Sqlite>,
     ) -> sqlx::Result<Option<String>> {
-        let lower = self.root.to_lowercase();
+        let lower = self.name.to_lowercase();
         let row = sqlx::query!(
             r#"
             SELECT name FROM artists
@@ -56,13 +57,13 @@ impl ArtistTree {
         &self,
         pool: &Pool<Sqlite>,
     ) -> sqlx::Result<()> {
-        let lower = self.root.to_lowercase();
+        let lower = self.name.to_lowercase();
         sqlx::query!(
             r#"
             INSERT OR IGNORE INTO artists (name, name_lower)
             VALUES ($1, $2)
         "#,
-            self.root,
+            self.name,
             lower,
         )
         .execute(pool)
@@ -140,7 +141,7 @@ impl ArtistTree {
             )
             VALUES ($1, $2, $3, date())
         "#,
-            self.root,
+            self.name,
             child,
             sim_int
         )

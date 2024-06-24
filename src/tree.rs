@@ -2,7 +2,7 @@
 // usize)> -- see https://github.com/eliben/code-for-blog/blob/master/2021/rust-bst/src/nodehandle.rs.
 // eventually i found Vec indexing really annoying, and switched over to an
 // "edge-only" Vec<Edge>. then i also found -that- ugly, and switched to a
-// HashMap.
+// HashMap (and later IndexMap).
 
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -14,6 +14,7 @@ use petgraph::graph::Graph;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::NodeIndexable;
 
+use crate::artists::Artist;
 // use crate::artists::LastfmError;
 use crate::SqPool;
 
@@ -26,20 +27,26 @@ where
     actix_web::error::ErrorInternalServerError(e)
 }
 
-#[derive(Debug)]
-/// raw json -> IndexMap (+ db rows) -> Graph -> Dot -> html
+// #[derive(Debug)]
+// raw json -> IndexMap (+ db rows) -> Graph -> Dot -> html
+// TODO: at some point, this should be made a (public) field of Artist
+/// An `ArtistTree` comprises `Artist` nodes. Each `Artist` node is responsible
+/// for retrieving similar `Artist`s (i.e. edges).
 ///
-/// This should be implemented as a tree, because graphs will usually produce
-/// many uninteresting cycles.
+/// This is implemented as a tree (specifically, an adjacency list); graphs will
+/// usually produce many uninteresting cycles.
 pub struct ArtistTree {
     pub root: String,
 
-    // edges: Vec<Edge>,
-    pub nodes: IndexMap<String, NodeIndex>,
+    // TODO:
+    // pub nodes: IndexMap<Artist, NodeIndex>,
+    /// `IndexMap` is used to preserve insertion order of nodes (`HashMap` and
+    /// `BTreeMap` have consequences).
+    nodes: IndexMap<String, NodeIndex>,
 
     #[allow(dead_code)]
     /// Default: 0.7
-    threshold: f64,
+    threshold: f64, // TODO: use int
 
     #[allow(dead_code)]
     /// Default: 2
@@ -56,7 +63,6 @@ impl ArtistTree {
         let threshold = 0.7;
         let depth = 2;
 
-        // let mut tree = Self {
         Self {
             root,
             nodes,
@@ -65,6 +71,9 @@ impl ArtistTree {
             graph: Graph::new(),
         }
     }
+
+    /// Wrapper for `IndexMap.keys()` (`self.nodes` is kept private)
+    pub fn nodes(&self) -> impl Iterator<Item = &String> { self.nodes.keys() }
 
     // fn with_threshold(
     //     mut self,
@@ -82,22 +91,24 @@ impl ArtistTree {
     //     self
     // }
 
-    /// `self.nodes` is only used to keep track of what has been added to the
-    /// `Graph`. It is not otherwise used.
+    /// Uses an adjacency list under the hood. `self.nodes` is only used to keep
+    /// track of what has been added to the `Graph`. It is not otherwise
+    /// used.
     ///
     /// Note: `self.root` will be replaced with the canonical name.
     pub async fn build_tree(
         mut self,
         pool: &SqPool,
-        // ) -> anyhow::Result<()> {
     ) -> anyhow::Result<Self> {
         for i in 0..=self.depth {
             let parents = match i {
                 0 => {
                     // we literally only do this in order to store the canonical name in the db and
                     // get it back; the map returned by the function doesn't actually contain it!
-                    self.get_similar_artists(pool).await?;
-                    let canon = self.canonical_name(pool).await?.context("")?;
+
+                    let mut root = Artist { name: self.root };
+                    root.get_similar_artists(pool).await?;
+                    let canon = root.canonical_name(pool).await?.context("")?;
                     // println!("{:?}", canon);
                     self.root = canon.clone(); // override with the canonical
 
@@ -108,10 +119,13 @@ impl ArtistTree {
             };
 
             for parent in parents {
-                // let map = ArtistTree::new(&parent).get_similar_artists(pool).await?;
-
                 // deal with LastmError variants here (instead of ?)
-                let map = match ArtistTree::new(&parent).get_similar_artists(pool).await {
+                // let map = match ArtistTree::new(&parent).get_similar_artists(pool).await {
+                let mut artist = Artist {
+                    // struct cannot be instantianted in a match statement
+                    name: parent.clone(),
+                };
+                let map = match artist.get_similar_artists(pool).await {
                     Ok(m) => m,
                     Err(e) => return Err(anyhow::anyhow!(e)),
                 };

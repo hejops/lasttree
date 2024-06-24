@@ -235,7 +235,7 @@ async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
     // println!("{:#?}", chart);
     // println!("get_charts: {}", user);
 
-    let html = chart.as_html(user)?;
+    let html = chart.as_html(user).await?;
     Ok(html)
 }
 
