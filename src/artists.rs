@@ -1,4 +1,5 @@
-//! Module for fetching similar artists from last.fm API
+//! Module for fetching similar artists from last.fm API. Kind of weird because
+//! `Artist`s are really only a means to end (`ArtistTree`).
 //!
 //! http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json
 
@@ -16,18 +17,6 @@ use urlencoding::encode;
 use crate::get_api_key;
 use crate::ArtistTree;
 use crate::SqPool;
-
-/// Top-level json object returned by last.fm
-#[derive(Deserialize, Debug, Clone)]
-struct LastfmArtist {
-    /// Only used to extract the canonical name (with the correct
-    /// capitalisation)
-    #[serde(rename = "@attr")]
-    attr: Value,
-
-    #[serde(rename = "artist")]
-    similar_artists: Vec<Artist>,
-}
 
 /// A convenience struct used when iterating over a json array
 #[derive(Deserialize, Debug, Clone)]
@@ -132,24 +121,27 @@ impl ArtistTree {
 
         // String -> Value -> struct
         let resp = reqwest::get(url).await?.text().await?;
-        let raw_json: Value = serde_json::from_str::<Value>(&resp)?;
-        let json = &raw_json["similarartists"];
-        let artist: LastfmArtist = serde_json::from_value(json.clone())?;
+        // let raw_json: Value = serde_json::from_str::<Value>(&resp)?;
+        // let json = &raw_json["similarartists"];
 
-        let canon: String = serde_json::from_value(artist.attr["artist"].clone())?;
+        let json: Value = serde_json::from_str(&resp)?;
+        let json = &json["similarartists"];
+
         // i would have liked to leave mutation of self to callers, but i'd have to
         // return canon_name in addition to map, leading to an ugly function
         // signature
-        self.root = canon;
+        self.root = serde_json::from_value(json["@attr"]["artist"].clone())?;
         self.store(pool).await?;
 
         // let mut map = HashMap::new(); // HashMap uses arbitrary order
         // let mut map = BTreeMap::new(); // BTreeMap always sorts by key
         let mut map = IndexMap::new();
 
-        for child in artist.similar_artists {
-            self.store_pair(&child.name, child.similarity, pool).await?;
-            map.insert(child.name, (child.similarity * 100.0) as i64);
+        let similars: Vec<Artist> = serde_json::from_value(json["artist"].clone())?;
+
+        for sim in similars {
+            self.store_pair(&sim.name, sim.similarity, pool).await?;
+            map.insert(sim.name, (sim.similarity * 100.0) as i64);
         }
 
         Ok(map)
