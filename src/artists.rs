@@ -1,7 +1,6 @@
-//! Module for fetching similar artists from last.fm API. Kind of weird because
-//! `Artist`s are really only a means to end (`ArtistTree`).
-//!
-//! http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json
+//! Module for fetching similar artists from last.fm API. The implementation is
+//! kind of weird for now because `Artist`s are really only a means to end
+//! (`ArtistTree`).
 
 use std::f64;
 
@@ -18,6 +17,7 @@ use crate::get_api_key;
 use crate::get_json;
 use crate::SqPool;
 use crate::LASTFM_KEY;
+use crate::LASTFM_URL;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Artist {
@@ -29,38 +29,17 @@ impl Artist {
         // TODO: get from db
 
         let url = format!(
-        "http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist={}&api_key={}&format=json",
-        self.name,
-        *LASTFM_KEY
-    );
+            "{}&method=artist.getinfo&artist={}&api_key={}",
+            *LASTFM_URL, self.name, *LASTFM_KEY
+        );
         let json = get_json(&url).await?;
 
         let listeners: String =
             serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
 
-        // TODO: store
+        // TODO: store in db
 
         Ok(listeners.parse()?)
-    }
-}
-
-/// A convenience struct used when iterating over a json array
-#[derive(Deserialize, Debug, Clone)]
-pub struct SimilarArtist {
-    pub name: String,
-
-    /// Deserialized as `f64`, but stored in db as `i64` (since sqlite has no
-    /// `NUMERIC` type)
-    #[serde(rename = "match", deserialize_with = "str_to_f64")]
-    pub similarity: f64,
-}
-
-impl PartialEq for SimilarArtist {
-    fn eq(
-        &self,
-        other: &Self,
-    ) -> bool {
-        self.name == other.name
     }
 }
 
@@ -111,6 +90,26 @@ impl ResponseError for LastfmError {
     }
 }
 
+/// A convenience struct used when iterating over a json array
+#[derive(Deserialize, Debug, Clone)]
+pub struct SimilarArtist {
+    pub name: String,
+
+    /// Deserialized as `f64`, but stored in db as `i64` (since sqlite has no
+    /// `NUMERIC` type)
+    #[serde(rename = "match", deserialize_with = "str_to_f64")]
+    pub similarity: f64,
+}
+
+impl PartialEq for SimilarArtist {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.name == other.name
+    }
+}
+
 impl Artist {
     /// Important: a Last.fm API key is required
     ///
@@ -137,11 +136,10 @@ impl Artist {
         let key = get_api_key(pool).await?.ok_or(LastfmError::NoApiKey)?;
 
         let url = format!(
-            "http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist={}&api_key={}&format=json",
+            "{}&method=artist.getsimilar&artist={}&api_key={key}",
+            *LASTFM_URL,
             encode(&self.name),
-            // *LASTFM_KEY
-            key,
-    );
+        );
 
         // TODO: NotFound variant is somewhere here...
 

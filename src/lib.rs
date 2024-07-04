@@ -22,6 +22,7 @@ mod player;
 pub mod routes;
 pub mod tests;
 mod tree;
+pub mod utils;
 pub use db::*;
 pub use genres::*;
 pub use tree::*;
@@ -35,8 +36,7 @@ lazy_static::lazy_static! {
     static ref LASTFM_KEY: String =
         std::env::var("LASTFM_KEY").expect("Environment variable $LASTFM_KEY must be set");
 
-    static ref LASTFM_URL: String =
-        format!("http://ws.audioscrobbler.com/2.0/?format=json&api_key={}", LASTFM_KEY.as_str());
+    static ref LASTFM_URL: String = "http://ws.audioscrobbler.com/2.0/?format=json".to_string();
 
     static ref APP_NAME: String = "Last".to_string();
 

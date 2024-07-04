@@ -11,6 +11,7 @@ use strum::IntoEnumIterator;
 use crate::artists::Artist;
 use crate::html;
 use crate::LASTFM_KEY;
+use crate::LASTFM_URL;
 
 // TODO: unify User and Chart structs?
 
@@ -258,14 +259,15 @@ impl User {
     ) -> anyhow::Result<Chart> {
         let limit = 10;
 
+        // TODO: construct urls via struct (not string)
         let url = format!(
-        // "http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json&limit=3",
-        "http://ws.audioscrobbler.com/2.0/?method=user.gettopartists&user={}&api_key={}&period={period}&format=json&limit={limit}",
-        self.username,
-        *LASTFM_KEY
-        // TODO:
-        // get_api_key(pool).await?.unwrap(),
-    );
+            "{}&method=user.gettopartists&user={}&api_key={}&period={period}&limit={limit}",
+            *LASTFM_URL,
+            self.username,
+            *LASTFM_KEY,
+            // get_api_key(pool).await?.unwrap(),
+        );
+
         let json = reqwest::get(url).await?.text().await?;
         let json: Value = serde_json::from_str(&json)?;
         // println!("{:#?}", json);
@@ -278,14 +280,15 @@ impl User {
     }
 
     /// Unlike `get_chart_period`, this allows a custom window, as specified by
-    /// 2 timestamps
+    /// 2 timestamps. If a window is not specified, the last week (7 days) is
+    /// used.
     ///
     /// https://www.last.fm/api/show/user.getWeeklyArtistChart
     pub async fn get_chart_window(&self) {
-        let _url = format!("http://ws.audioscrobbler.com/2.0/?method=user.getweeklyartistchart&user={}&api_key={}&format=json",
-        self.username,
-        *LASTFM_KEY
-    );
+        let _url = format!(
+            "{}&method=user.getweeklyartistchart&user={}&api_key={}",
+            *LASTFM_URL, self.username, *LASTFM_KEY
+        );
     }
 }
 

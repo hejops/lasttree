@@ -211,7 +211,7 @@ impl ArtistTree {
 mod tests {
 
     use super::ArtistTree;
-    use crate::tests::init_test_artist;
+    use crate::tests::init_test_artist_tree;
     use crate::tests::TestPool;
     use crate::LASTFM_KEY;
 
@@ -223,7 +223,7 @@ mod tests {
         root: &str,
         expected_nodes: &[&str],
     ) {
-        let tree = init_test_artist(root, Some(&LASTFM_KEY)).await;
+        let tree = init_test_artist_tree(root, &LASTFM_KEY).await;
 
         assert!(!tree.nodes.is_empty());
 
@@ -255,7 +255,7 @@ mod tests {
     async fn node_order() {
         check_nodes(
             "loona",
-            // artist (canonical), followed by similar artists in descending similarity
+            // root (canonical), followed by similar artists in descending similarity
             &["Loona", "LOOΠΔ 1/3", "LOONA/yyxy", "LOOΠΔ / ODD EYE CIRCLE"],
         )
         .await;

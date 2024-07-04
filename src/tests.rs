@@ -41,10 +41,10 @@ impl TestPool {
     }
 }
 
-pub async fn init_test_artist(
+pub async fn init_test_artist_tree(
     name: &str,
-    key: Option<&str>,
+    key: &str,
 ) -> ArtistTree {
-    let pool = &TestPool::new(key).await.pool;
+    let pool = &TestPool::new(Some(key)).await.pool;
     ArtistTree::new(name).build_tree(pool).await.unwrap()
 }

@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::LASTFM_KEY;
+use crate::LASTFM_URL;
 
 /// Wrapper for `Vec<Genre>`, solely for better error-handling
 #[derive(Deserialize)]
@@ -40,8 +41,8 @@ pub async fn get_json(url: &str) -> anyhow::Result<Value> {
 // nearly identical to tag.getTopTags
 pub async fn get_top_genres() -> anyhow::Result<Genres> {
     let url = format!(
-        "https://ws.audioscrobbler.com/2.0/?method=chart.gettoptags&api_key={}&format=json",//&limit=3",
-        *LASTFM_KEY
+        "{}&method=chart.gettoptags&api_key={}&format=json", //&limit=3",
+        *LASTFM_URL, *LASTFM_KEY
     );
     let json = get_json(&url).await.unwrap();
 
@@ -52,8 +53,8 @@ pub async fn get_top_genres() -> anyhow::Result<Genres> {
 
 pub async fn get_genre() {
     let url = format!(
-        "https://ws.audioscrobbler.com/2.0/?method=tag.gettopartists&api_key={}&format=json",//&limit=3",
-        *LASTFM_KEY
+        "{}&method=tag.gettopartists&api_key={}", //&limit=3",
+        *LASTFM_URL, *LASTFM_KEY
     );
     let json = get_json(&url).await.unwrap();
     println!("{:?}", json);
