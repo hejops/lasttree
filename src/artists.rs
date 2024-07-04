@@ -15,9 +15,9 @@ use urlencoding::encode;
 
 use crate::get_api_key;
 use crate::get_json;
+use crate::utils::build_lastfm_url;
 use crate::SqPool;
 use crate::LASTFM_KEY;
-use crate::LASTFM_URL;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Artist {
@@ -26,13 +26,10 @@ pub struct Artist {
 
 impl Artist {
     pub async fn get_listeners(&self) -> anyhow::Result<u32> {
-        // TODO: get from db
+        // TODO: get listeners from db
 
-        let url = format!(
-            "{}&method=artist.getinfo&artist={}&api_key={}",
-            *LASTFM_URL, self.name, *LASTFM_KEY
-        );
-        let json = get_json(&url).await?;
+        let url = build_lastfm_url("artist.getinfo", &LASTFM_KEY, &[("artist", &self.name)])?;
+        let json = get_json(url.as_ref()).await?;
 
         let listeners: String =
             serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
@@ -67,10 +64,9 @@ pub enum LastfmError {
 
     // variant(#[from] module::Error) enables ?
     // but error types must be unique!
-
-    // #[error("Not found {0}")]
+    #[error("Not found {0}")]
     // ParseError(String),
-    #[error("Not found")]
+    // #[error("Not found")]
     ParseError(#[from] serde_json::Error),
 
     #[error(transparent)]
@@ -135,11 +131,7 @@ impl Artist {
 
         let key = get_api_key(pool).await?.ok_or(LastfmError::NoApiKey)?;
 
-        let url = format!(
-            "{}&method=artist.getsimilar&artist={}&api_key={key}",
-            *LASTFM_URL,
-            encode(&self.name),
-        );
+        let url = build_lastfm_url("artist.getsimilar", &key, &[("artist", &self.name)]).unwrap();
 
         // TODO: NotFound variant is somewhere here...
 
@@ -223,6 +215,8 @@ mod tests {
         let mut artist = Artist {
             name: "loona".to_string(),
         };
+
+        println!("{:#?}", get_api_key(pool).await.unwrap());
 
         assert!(get_api_key(pool).await.unwrap().is_none());
 

@@ -10,8 +10,8 @@ use strum::IntoEnumIterator;
 
 use crate::artists::Artist;
 use crate::html;
+use crate::utils::build_lastfm_url;
 use crate::LASTFM_KEY;
-use crate::LASTFM_URL;
 
 // TODO: unify User and Chart structs?
 
@@ -198,6 +198,10 @@ pub enum Period {
     Overall,
 }
 
+// impl AsRef<str> for Period {
+//     fn as_ref(&self) -> &str { &self.to_string() }
+// }
+
 impl Default for Period {
     fn default() -> Self { Self::Overall }
 }
@@ -259,14 +263,15 @@ impl User {
     ) -> anyhow::Result<Chart> {
         let limit = 10;
 
-        // TODO: construct urls via struct (not string)
-        let url = format!(
-            "{}&method=user.gettopartists&user={}&api_key={}&period={period}&limit={limit}",
-            *LASTFM_URL,
-            self.username,
-            *LASTFM_KEY,
-            // get_api_key(pool).await?.unwrap(),
-        );
+        let url = build_lastfm_url(
+            "user.gettopartists",
+            &LASTFM_KEY,
+            &[
+                ("limit", &limit.to_string()),
+                ("period", &period.to_string()),
+                ("user", &self.username),
+            ],
+        )?;
 
         let json = reqwest::get(url).await?.text().await?;
         let json: Value = serde_json::from_str(&json)?;
@@ -285,9 +290,10 @@ impl User {
     ///
     /// https://www.last.fm/api/show/user.getWeeklyArtistChart
     pub async fn get_chart_window(&self) {
-        let _url = format!(
-            "{}&method=user.getweeklyartistchart&user={}&api_key={}",
-            *LASTFM_URL, self.username, *LASTFM_KEY
+        let _url = build_lastfm_url(
+            "user.getweeklyartistchart",
+            &LASTFM_KEY,
+            &[("user", &self.username)],
         );
     }
 }
@@ -299,12 +305,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_week() {
-        // let ch = crate::charts::overall(&LASTFM_USER, None).await.unwrap();
         let ch = User::new(&LASTFM_USER)
             .unwrap()
             .get_chart_period(crate::charts::Period::Week)
             .await
             .unwrap();
         assert_eq!(ch.artists.first().unwrap().rank, 1);
+        assert_eq!(ch.artists.last().unwrap().rank, 10);
     }
 }

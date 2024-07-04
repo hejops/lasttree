@@ -1,5 +1,9 @@
 // see also: num-format
 
+use reqwest::Url;
+
+use crate::LASTFM_URL;
+
 const MILLION: f64 = 1_000_000.0;
 
 pub fn human_number(num: usize) -> String {
@@ -13,6 +17,20 @@ pub fn human_number(num: usize) -> String {
         }),
         _ => todo!(),
     }
+}
+
+/// Because repeatedly using `format!` is annoying
+///
+/// Note: values in `params` must not be URL encoded!
+pub fn build_lastfm_url(
+    method: &str,
+    key: &str,
+    params: &[(&str, &str)],
+) -> anyhow::Result<Url> {
+    let mut all_params = vec![("method", method), ("api_key", key)];
+    all_params.extend_from_slice(params);
+    let url = Url::parse_with_params(&LASTFM_URL, all_params)?;
+    Ok(url)
 }
 
 #[cfg(test)]

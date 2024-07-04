@@ -7,8 +7,7 @@ use sqlx::Pool;
 use sqlx::Sqlite;
 
 use crate::artists::Artist;
-use crate::LASTFM_URL;
-// use crate::ArtistTree;
+use crate::utils::build_lastfm_url;
 
 pub type SqPool = Pool<Sqlite>;
 
@@ -176,10 +175,7 @@ pub async fn store_api_key(
     let key = key.trim();
 
     // TODO: is there a better dummy request?
-    let url = format!(
-        "{}&method=chart.gettoptags&api_key={}&limit=1",
-        *LASTFM_URL, key
-    );
+    let url = build_lastfm_url("chart.gettoptags", key, &[("limit", "1")])?;
     (reqwest::get(url).await?.status().as_u16() == 200)
         .then_some(())
         .ok_or(anyhow::anyhow!("Invalid API key"))?;
