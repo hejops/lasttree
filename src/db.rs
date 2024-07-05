@@ -11,6 +11,13 @@ use crate::utils::build_lastfm_url;
 
 pub type SqPool = Pool<Sqlite>;
 
+// TODO: on "error: migration ... was previously applied but is missing in the
+// resolved migrations" (on deleting an .sql file which was migrated) -- may be
+// possible to avoid nuking the db by "delet[ing] the version row from the
+// _sqlx_migration table"
+//
+// https://old.reddit.com/r/rust/comments/12z6n77/resolving_previously_applied_but_missing_error_in/l0qlcz6/
+
 // TODO: seed db with the 25 most popular artists of a given genre
 
 pub fn init_db(db_url: &str) -> sqlx::Result<SqPool> {
@@ -55,7 +62,7 @@ impl Artist {
 
     pub async fn store(
         &self,
-        pool: &Pool<Sqlite>,
+        pool: &SqPool,
     ) -> sqlx::Result<()> {
         let lower = self.name.to_lowercase();
         sqlx::query!(
@@ -69,6 +76,46 @@ impl Artist {
         .execute(pool)
         .await?;
         Ok(())
+    }
+
+    pub async fn store_with_listeners(
+        &self,
+        pool: &SqPool,
+        listeners: u32,
+    ) -> sqlx::Result<()> {
+        self.store(pool).await?;
+
+        let name = self.name.to_lowercase();
+        sqlx::query!(
+            r#"
+            UPDATE artists
+            SET listeners = $1
+            WHERE name_lower = $2
+            "#,
+            listeners,
+            name
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_with_listeners(
+        &self,
+        pool: &SqPool,
+        // 2 Options: row may not exist, listeners field may be null
+    ) -> sqlx::Result<Option<Option<i64>>> {
+        let name = self.name.to_lowercase();
+        let row = sqlx::query!(
+            r#"
+            SELECT listeners FROM artists
+            WHERE name_lower = $1
+            "#,
+            name
+        )
+        .fetch_optional(pool)
+        .await?;
+        Ok(row.map(|r| r.listeners))
     }
 
     pub async fn get_artist_pairs(

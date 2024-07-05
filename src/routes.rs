@@ -214,7 +214,10 @@ async fn get_charts_user(path: web::Path<ChartsPath>) -> impl Responder {
 }
 
 #[get("/charts/{user}/{period}")]
-async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
+async fn get_charts(
+    path: web::Path<ChartsPath>,
+    pool: web::Data<SqPool>,
+) -> actix_web::Result<Markup> {
     let user = &path.user;
 
     // TODO: silently use default, or show error/warning?
@@ -235,7 +238,7 @@ async fn get_charts(path: web::Path<ChartsPath>) -> actix_web::Result<Markup> {
     // println!("{:#?}", chart);
     // println!("get_charts: {}", user);
 
-    let html = chart.as_html(user).await?;
+    let html = chart.as_html(user, &pool).await?;
     Ok(html)
 }
 

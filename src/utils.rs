@@ -6,7 +6,7 @@ use crate::LASTFM_URL;
 
 const MILLION: f64 = 1_000_000.0;
 
-pub fn human_number(num: usize) -> String {
+pub fn human_number(num: u32) -> String {
     match (num as f64).log10().floor() as usize {
         0..=2 => num.to_string(),
         3..=5 => format!("{} K", num / 1000),

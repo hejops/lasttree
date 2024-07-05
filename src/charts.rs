@@ -11,6 +11,8 @@ use strum::IntoEnumIterator;
 use crate::artists::Artist;
 use crate::html;
 use crate::utils::build_lastfm_url;
+use crate::utils::human_number;
+use crate::SqPool;
 use crate::LASTFM_KEY;
 
 // TODO: unify User and Chart structs?
@@ -42,12 +44,16 @@ struct ChartArtist {
 }
 
 impl ChartArtist {
-    // this is a poor hack to "inherit" a method from another struct
-    async fn get_listeners(&self) -> anyhow::Result<u32> {
+    // TODO: this is a poor hack to "inherit" a method from another struct. the
+    // proper way to share methods is to use a trait
+    async fn get_listeners(
+        &self,
+        pool: &SqPool,
+    ) -> anyhow::Result<u32> {
         Artist {
             name: self.name.clone(),
         }
-        .get_listeners()
+        .get_listeners(pool)
         .await
     }
 }
@@ -56,6 +62,7 @@ impl Chart {
     pub async fn as_html(
         &self,
         user: &str,
+        pool: &SqPool,
     ) -> actix_web::Result<Markup> {
         // let library_link = |user: &str, artist: &str| {
         //     format!("https://www.last.fm/user/{user}/library/music/{artist}?date_preset=ALL")
@@ -125,8 +132,8 @@ impl Chart {
                         artist.rank.to_string(),
                         (html::link(&link, name).into()),
                         artist.playcount.to_string(),
-                        // TODO: as % of total
-                        artist.get_listeners().await.unwrap_or(0).to_string(),
+                        // TODO: plays as % of total plays in the current period
+                        human_number(artist.get_listeners(pool).await.unwrap_or(0))
                     ];
                     (html::table_row(cols))
                 }

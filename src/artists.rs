@@ -11,7 +11,6 @@ use serde::de;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde_json::Value;
-use urlencoding::encode;
 
 use crate::get_api_key;
 use crate::get_json;
@@ -25,18 +24,24 @@ pub struct Artist {
 }
 
 impl Artist {
-    pub async fn get_listeners(&self) -> anyhow::Result<u32> {
-        // TODO: get listeners from db
+    pub async fn get_listeners(
+        &self,
+        pool: &SqPool,
+    ) -> anyhow::Result<u32> {
+        if let Ok(Some(Some(x))) = self.get_with_listeners(pool).await {
+            return Ok(x.try_into()?);
+        };
 
         let url = build_lastfm_url("artist.getinfo", &LASTFM_KEY, &[("artist", &self.name)])?;
         let json = get_json(url.as_ref()).await?;
 
         let listeners: String =
             serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
+        let listeners: u32 = listeners.parse()?;
 
-        // TODO: store in db
+        self.store_with_listeners(pool, listeners).await?;
 
-        Ok(listeners.parse()?)
+        Ok(listeners)
     }
 }
 
