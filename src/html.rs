@@ -163,6 +163,16 @@ impl ArtistTree {
                     )
                 }),
             ),
+            // // TODO: this requires a new db table, so think twice
+            // (
+            //     "Tags",
+            //     Box::new(|artist| {
+            //         let a = Artist {
+            //             name: artist.to_string(),
+            //         };
+            //         a.get_tags().await.unwrap()
+            //     }),
+            // ),
         ];
 
         let table = html! {

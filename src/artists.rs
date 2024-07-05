@@ -23,28 +23,6 @@ pub struct Artist {
     pub name: String,
 }
 
-impl Artist {
-    pub async fn get_listeners(
-        &self,
-        pool: &SqPool,
-    ) -> anyhow::Result<u32> {
-        if let Ok(Some(Some(x))) = self.get_with_listeners(pool).await {
-            return Ok(x.try_into()?);
-        };
-
-        let url = build_lastfm_url("artist.getinfo", &LASTFM_KEY, &[("artist", &self.name)])?;
-        let json = get_json(url.as_ref()).await?;
-
-        let listeners: String =
-            serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
-        let listeners: u32 = listeners.parse()?;
-
-        self.store_with_listeners(pool, listeners).await?;
-
-        Ok(listeners)
-    }
-}
-
 // https://stackoverflow.com/a/75684771
 // https://serde.rs/impl-deserialize.html
 fn str_to_f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
@@ -94,6 +72,7 @@ impl ResponseError for LastfmError {
 /// A convenience struct used when iterating over a json array
 #[derive(Deserialize, Debug, Clone)]
 pub struct SimilarArtist {
+    // Always canonical
     pub name: String,
 
     /// Deserialized as `f64`, but stored in db as `i64` (since sqlite has no
@@ -112,20 +91,26 @@ impl PartialEq for SimilarArtist {
 }
 
 impl Artist {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+        }
+    }
+
     /// Important: a Last.fm API key is required
     ///
-    /// Fetches from db if `artist` has been cached in the `artists` table.
+    /// Fetches from db if `self.name` has been cached in the `artists` table.
     /// Otherwise, a network request to last.fm is made, and the request is
     /// processed and cached so it can be skipped the next time.
     ///
     /// Notes:
-    /// - `artist` will **not** be included in the map's keys
+    /// - `self.name` will **not** be included in the map's keys
     /// - the maximum similarity is 100
     /// - sort order is similarity, descending (insertion order is preserved)
     /// - currently this requires `&mut self`, which is unintuitive; this should
     ///   be changed in future
     pub async fn get_similar_artists(
-        &mut self,
+        &self,
         pool: &SqPool,
         // ) -> anyhow::Result<IndexMap<String, i64>> {
     ) -> Result<IndexMap<String, i64>, LastfmError> {
@@ -146,11 +131,8 @@ impl Artist {
         let json: Value = serde_json::from_str(&resp)?;
         let json = &json["similarartists"];
 
-        // i would have liked to leave mutation of self to callers, but i'd have to
-        // return canon_name in addition to map, leading to an ugly function
-        // signature
-        self.name = serde_json::from_value(json["@attr"]["artist"].clone())?;
-        self.store(pool).await?;
+        let canon_name: String = serde_json::from_value(json["@attr"]["artist"].clone())?;
+        self.store(pool, &canon_name).await?;
 
         // let mut map = HashMap::new(); // HashMap uses arbitrary order
         // let mut map = BTreeMap::new(); // BTreeMap always sorts by key
@@ -159,11 +141,55 @@ impl Artist {
         let similars: Vec<SimilarArtist> = serde_json::from_value(json["artist"].clone())?;
 
         for sim in similars {
-            self.store_pair(&sim.name, sim.similarity, pool).await?;
+            self.store_pair(&canon_name, &sim.name, sim.similarity, pool)
+                .await?;
             map.insert(sim.name, (sim.similarity * 100.0) as i64);
         }
 
         Ok(map)
+    }
+
+    pub async fn get_listeners(
+        &self,
+        pool: &SqPool,
+    ) -> anyhow::Result<u32> {
+        if let Ok(Some(Some(x))) = self.get_with_listeners(pool).await {
+            return Ok(x.try_into()?);
+        };
+
+        let url = build_lastfm_url("artist.getinfo", &LASTFM_KEY, &[("artist", &self.name)])?;
+        let json = get_json(url.as_ref()).await?;
+
+        let listeners: String =
+            serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
+        let listeners: u32 = listeners.parse()?;
+
+        self.store_with_listeners(pool, listeners).await?;
+
+        Ok(listeners)
+    }
+
+    pub async fn _get_tags(
+        &self,
+        // pool: &SqPool,
+    ) -> anyhow::Result<Vec<String>> {
+        // if let Ok(Some(Some(x))) = self.get_with_listeners(pool).await {
+        //     return Ok(x.try_into()?);
+        // };
+
+        let url = build_lastfm_url("artist.getinfo", &LASTFM_KEY, &[("artist", &self.name)])?;
+        let json = get_json(url.as_ref()).await?;
+
+        let tags: Vec<Value> = serde_json::from_value(json["artist"]["tags"]["tag"].clone())?;
+
+        let tags = tags
+            .iter()
+            .map(|tag| serde_json::from_value::<String>(tag["name"].clone()).unwrap())
+            .collect();
+
+        // self.store_with_listeners(pool, listeners).await?;
+
+        Ok(tags)
     }
 }
 
@@ -179,14 +205,13 @@ mod tests {
         children: &[&str],
     ) {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let mut artist = Artist {
-            name: parent.to_string(),
-        };
+        let artist = Artist::new(parent);
 
         let retrieved = artist.get_similar_artists(pool).await.unwrap();
         assert_eq!(retrieved.len(), 100);
         assert_eq!(retrieved.values().max(), Some(&100));
 
+        println!("{:#?}", artist.get_artist_pairs(pool).await);
         let stored = artist.get_artist_pairs(pool).await.unwrap().unwrap();
         assert_eq!(stored.len(), 100);
         assert_eq!(
@@ -204,9 +229,7 @@ mod tests {
     #[tokio::test]
     async fn no_key() {
         let pool = &TestPool::new(None).await.pool;
-        let mut artist = Artist {
-            name: "loona".to_string(),
-        };
+        let artist = Artist::new("loona");
 
         assert!(get_api_key(pool).await.unwrap().is_none());
 
@@ -217,9 +240,7 @@ mod tests {
     #[tokio::test]
     async fn invalid_key() {
         let pool = &TestPool::new(Some("foo")).await.pool;
-        let mut artist = Artist {
-            name: "loona".to_string(),
-        };
+        let artist = Artist::new("loona");
 
         println!("{:#?}", get_api_key(pool).await.unwrap());
 
@@ -266,14 +287,22 @@ mod tests {
     #[tokio::test]
     async fn cached_result() {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let mut artist = Artist {
-            name: "loona".to_string(),
-        };
+        let artist = Artist::new("loona");
 
         // TODO: test that only 1 (?) http request made -- Mock seems unsuitable, since
         // it tests requests made to our (mocked) server. we want to check the
         // number of outgoing GET requests to any server
         artist.get_similar_artists(pool).await.unwrap();
         artist.get_similar_artists(pool).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn get_tags() {
+        // let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
+        let artist = Artist::new("loona");
+        assert_eq!(
+            artist._get_tags().await.unwrap(),
+            ["pop", "female vocalists", "dance", "k-pop", "spanish",]
+        )
     }
 }

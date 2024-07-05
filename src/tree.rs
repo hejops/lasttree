@@ -106,9 +106,9 @@ impl ArtistTree {
                     // we literally only do this in order to store the canonical name in the db and
                     // get it back; the map returned by the function doesn't actually contain it!
 
-                    let mut root = Artist { name: self.root };
+                    let root = Artist::new(&self.root);
                     root.get_similar_artists(pool).await?;
-                    let canon = root.canonical_name(pool).await?.context("")?;
+                    let canon = root.canonical_name(pool).await?.context("fjdaks")?;
                     // println!("{:?}", canon);
                     self.root = canon.clone(); // override with the canonical
 
@@ -120,11 +120,7 @@ impl ArtistTree {
 
             for parent in parents {
                 // deal with LastmError variants here (instead of ?)
-                // let map = match ArtistTree::new(&parent).get_similar_artists(pool).await {
-                let mut artist = Artist {
-                    // struct cannot be instantianted in a match statement
-                    name: parent.clone(),
-                };
+                let artist = Artist::new(&parent);
                 let map = match artist.get_similar_artists(pool).await {
                     Ok(m) => m,
                     Err(e) => return Err(anyhow::anyhow!(e)),

@@ -50,11 +50,7 @@ impl ChartArtist {
         &self,
         pool: &SqPool,
     ) -> anyhow::Result<u32> {
-        Artist {
-            name: self.name.clone(),
-        }
-        .get_listeners(pool)
-        .await
+        Artist::new(&self.name).get_listeners(pool).await
     }
 }
 

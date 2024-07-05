@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anyhow::Context;
 use indexmap::IndexMap;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
@@ -63,14 +64,15 @@ impl Artist {
     pub async fn store(
         &self,
         pool: &SqPool,
+        canon_name: &str,
     ) -> sqlx::Result<()> {
-        let lower = self.name.to_lowercase();
+        let lower = canon_name.to_lowercase();
         sqlx::query!(
             r#"
             INSERT OR IGNORE INTO artists (name, name_lower)
             VALUES ($1, $2)
         "#,
-            self.name,
+            canon_name,
             lower,
         )
         .execute(pool)
@@ -83,7 +85,8 @@ impl Artist {
         pool: &SqPool,
         listeners: u32,
     ) -> sqlx::Result<()> {
-        self.store(pool).await?;
+        let canon = self.canonical_name(pool).await?.context("fjdaks").unwrap();
+        self.store(pool, &canon).await?;
 
         let name = self.name.to_lowercase();
         sqlx::query!(
@@ -186,6 +189,7 @@ impl Artist {
     /// to integer before insertion into db.
     pub async fn store_pair(
         &self,
+        parent: &str,
         child: &str,
         similarity: f64,
         pool: &Pool<Sqlite>,
@@ -202,7 +206,7 @@ impl Artist {
             )
             VALUES ($1, $2, $3, date())
         "#,
-            self.name,
+            parent,
             child,
             sim_int
         )
