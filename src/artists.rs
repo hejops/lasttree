@@ -196,6 +196,8 @@ mod tests {
                 .iter()
                 .filter(|e| e.similarity >= 70)
                 .map(|e| e.child.as_str())
+                // note: truncation may not always be desired
+                .take(children.len())
                 .collect::<Vec<&str>>(),
             children
         );
@@ -253,6 +255,12 @@ mod tests {
                 "%%%VVV\\/\\/\\/∆∆∆∂∂∂+†*⤴⤴⤴™√Æı∆Æ|†◊æ~∂æ¬#☀\u{fe0e}☽",
                 "MAZES PURR",
             ],
+        )
+        .await;
+
+        check_similars(
+            "pestilence",
+            &["Atheist", "Malevolent Creation", "Nocturnus"],
         )
         .await;
     }
