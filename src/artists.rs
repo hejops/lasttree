@@ -141,7 +141,9 @@ impl Artist {
         let similars: Vec<SimilarArtist> = serde_json::from_value(json["artist"].clone())?;
 
         for sim in similars {
-            self.store_pair(&canon_name, &sim.name, sim.similarity, pool)
+            // it could have been possible to remove the `parent` arg in store_pair (and
+            // call self.canonical_name() instead), but that leads to needless db checks
+            self.store_pair(pool, &canon_name, &sim.name, sim.similarity)
                 .await?;
             map.insert(sim.name, (sim.similarity * 100.0) as i64);
         }

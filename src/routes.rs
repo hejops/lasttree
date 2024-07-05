@@ -63,7 +63,7 @@ async fn login(
     form: web::Form<ApiKeyFormData>,
     pool: web::Data<SqPool>,
 ) -> impl Responder {
-    store_api_key(&form.0.key, &pool).await.unwrap();
+    store_api_key(&pool, &form.0.key).await.unwrap();
     redirect(&form.0.redirect_to).await
 }
 

@@ -45,7 +45,7 @@ impl Artist {
     /// Query `artists` table (which is much faster than `artist_pairs`)
     pub async fn canonical_name(
         &self,
-        pool: &Pool<Sqlite>,
+        pool: &SqPool,
     ) -> sqlx::Result<Option<String>> {
         let lower = self.name.to_lowercase();
         let row = sqlx::query!(
@@ -123,7 +123,7 @@ impl Artist {
 
     pub async fn get_artist_pairs(
         &self,
-        pool: &Pool<Sqlite>,
+        pool: &SqPool,
     ) -> sqlx::Result<Option<Vec<ArtistPair>>> {
         let name = self.canonical_name(pool).await?;
 
@@ -185,14 +185,16 @@ impl Artist {
         }
     }
 
+    /// `parent` and `child` must both be canonical names.
+    ///
     /// Because sqlite does not support the `NUMERIC` type, `similarity` is cast
     /// to integer before insertion into db.
     pub async fn store_pair(
         &self,
+        pool: &SqPool,
         parent: &str,
         child: &str,
         similarity: f64,
-        pool: &Pool<Sqlite>,
     ) -> sqlx::Result<()> {
         let sim_int = (similarity * 100.0) as u32;
         sqlx::query!(
@@ -220,7 +222,7 @@ impl Artist {
 // {{{
 // if self-hosting, a single api key is enough, and we don't need a proper
 // login/authentication procedure
-pub async fn get_api_key(pool: &Pool<Sqlite>) -> sqlx::Result<Option<String>> {
+pub async fn get_api_key(pool: &SqPool) -> sqlx::Result<Option<String>> {
     let row = sqlx::query!(
         r#"
         SELECT key FROM api_key
@@ -234,8 +236,8 @@ pub async fn get_api_key(pool: &Pool<Sqlite>) -> sqlx::Result<Option<String>> {
 }
 
 pub async fn store_api_key(
+    pool: &SqPool,
     key: &str,
-    pool: &Pool<Sqlite>,
 ) -> anyhow::Result<()> {
     let key = key.trim();
 
@@ -258,7 +260,7 @@ pub async fn store_api_key(
     Ok(())
 }
 
-pub async fn delete_api_key(pool: &Pool<Sqlite>) -> sqlx::Result<()> {
+pub async fn delete_api_key(pool: &SqPool) -> sqlx::Result<()> {
     sqlx::query!("DELETE FROM api_key",).execute(pool).await?;
     Ok(())
 }

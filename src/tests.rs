@@ -32,7 +32,7 @@ impl TestPool {
         sqlx::migrate!().run(&pool).await.unwrap();
 
         if let Some(key) = key {
-            if let Err(e) = store_api_key(key, &pool).await {
+            if let Err(e) = store_api_key(&pool, key).await {
                 println!("{:?}", e);
             };
         };
