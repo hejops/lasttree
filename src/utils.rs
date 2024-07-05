@@ -22,6 +22,7 @@ pub fn human_number(num: u32) -> String {
 /// Because repeatedly using `format!` is annoying
 ///
 /// Note: values in `params` must not be URL encoded!
+// TODO: this is almost always followed by get_json, so this should be combined
 pub fn build_lastfm_url(
     method: &str,
     key: &str,

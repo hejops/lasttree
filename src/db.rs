@@ -121,7 +121,7 @@ impl Artist {
     pub async fn get_artist_pairs(
         &self,
         pool: &Pool<Sqlite>,
-    ) -> sqlx::Result<Vec<ArtistPair>> {
+    ) -> sqlx::Result<Option<Vec<ArtistPair>>> {
         let name = self.canonical_name(pool).await?;
 
         let mut pairs: Vec<ArtistPair> = sqlx::query!(
@@ -139,6 +139,7 @@ impl Artist {
         "#,
             name,
         )
+        // note: the `Vec` returned may be empty
         .fetch_all(pool)
         .await?
         .iter()
@@ -149,9 +150,13 @@ impl Artist {
         })
         .collect();
 
-        pairs.sort_by_key(|x| -x.similarity);
-
-        Ok(pairs)
+        Ok(match pairs.is_empty() {
+            true => None,
+            false => {
+                pairs.sort_by_key(|x| -x.similarity);
+                Some(pairs)
+            }
+        })
     }
 
     /// `canon` must be found in `artists` table. This allows the hashmap to be
@@ -159,13 +164,22 @@ impl Artist {
     pub async fn get_cached_similar_artists(
         &self,
         pool: &SqPool,
-    ) -> sqlx::Result<IndexMap<String, i64>> {
-        let mut map = IndexMap::new();
-        for pair in self.get_artist_pairs(pool).await? {
-            map.insert(pair.child, pair.similarity);
+    ) -> anyhow::Result<Option<IndexMap<String, i64>>> {
+        match self.get_artist_pairs(pool).await? {
+            Some(pairs) => {
+                // let map = IndexMap::from_iter(
+                //     pairs.into_iter().map(|pair| (pair.child, pair.similarity)),
+                // );
+
+                // for-loop is more readable
+                let mut map = IndexMap::new();
+                for pair in pairs {
+                    map.insert(pair.child, pair.similarity);
+                }
+                Ok(Some(map))
+            }
+            None => Ok(None),
         }
-        // println!("using cached result");
-        Ok(map)
     }
 
     /// Because sqlite does not support the `NUMERIC` type, `similarity` is cast

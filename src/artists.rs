@@ -130,8 +130,9 @@ impl Artist {
         // ) -> anyhow::Result<IndexMap<String, i64>> {
     ) -> Result<IndexMap<String, i64>, LastfmError> {
         if self.canonical_name(pool).await?.is_some() {
-            let cached = self.get_cached_similar_artists(pool).await?;
-            return Ok(cached);
+            if let Ok(Some(cached)) = self.get_cached_similar_artists(pool).await {
+                return Ok(cached);
+            }
         }
 
         let key = get_api_key(pool).await?.ok_or(LastfmError::NoApiKey)?;
@@ -142,9 +143,6 @@ impl Artist {
 
         // String -> Value -> struct
         let resp = reqwest::get(url).await?.text().await?;
-        // let raw_json: Value = serde_json::from_str::<Value>(&resp)?;
-        // let json = &raw_json["similarartists"];
-
         let json: Value = serde_json::from_str(&resp)?;
         let json = &json["similarartists"];
 
@@ -189,7 +187,7 @@ mod tests {
         assert_eq!(retrieved.len(), 100);
         assert_eq!(retrieved.values().max(), Some(&100));
 
-        let stored = artist.get_artist_pairs(pool).await.unwrap();
+        let stored = artist.get_artist_pairs(pool).await.unwrap().unwrap();
         assert_eq!(stored.len(), 100);
         assert_eq!(
             stored
