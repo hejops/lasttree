@@ -4,6 +4,7 @@
 *.pdf
 *.dot
 *.svg
+foo.*
 Cargo.lock
 .pre-commit-config.yaml
 lasttree

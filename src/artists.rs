@@ -155,7 +155,7 @@ impl Artist {
         &self,
         pool: &SqPool,
     ) -> anyhow::Result<u32> {
-        if let Ok(Some(Some(x))) = self.get_with_listeners(pool).await {
+        if let Ok(Some(Some(x))) = self.get_listeners_db(pool).await {
             return Ok(x.try_into()?);
         };
 
@@ -166,14 +166,14 @@ impl Artist {
             serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
         let listeners: u32 = listeners.parse()?;
 
-        self.store_with_listeners(pool, listeners).await?;
+        self.store_listeners(pool, listeners).await?;
 
         Ok(listeners)
     }
 
-    pub async fn _get_tags(
+    pub async fn get_tags(
         &self,
-        // pool: &SqPool,
+        pool: &SqPool,
     ) -> anyhow::Result<Vec<String>> {
         // if let Ok(Some(Some(x))) = self.get_with_listeners(pool).await {
         //     return Ok(x.try_into()?);
@@ -184,12 +184,13 @@ impl Artist {
 
         let tags: Vec<Value> = serde_json::from_value(json["artist"]["tags"]["tag"].clone())?;
 
+        // custom deserializer might help
         let tags = tags
             .iter()
             .map(|tag| serde_json::from_value::<String>(tag["name"].clone()).unwrap())
             .collect();
 
-        // self.store_with_listeners(pool, listeners).await?;
+        self.store_tags(pool, &tags).await?;
 
         Ok(tags)
     }
@@ -268,13 +269,15 @@ mod tests {
         )
         .await;
 
+        // TODO: not the most stable test case; this is mainly for testing how weird
+        // chars are returned
         check_similars(
             "sadwrist",
             &[
                 "tsujiura",
+                "MAZES PURR",
                 "Where Swans Will Weep",
                 "%%%VVV\\/\\/\\/∆∆∆∂∂∂+†*⤴⤴⤴™√Æı∆Æ|†◊æ~∂æ¬#☀\u{fe0e}☽",
-                "MAZES PURR",
             ],
         )
         .await;
@@ -300,10 +303,10 @@ mod tests {
 
     #[tokio::test]
     async fn get_tags() {
-        // let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
+        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
         let artist = Artist::new("loona");
         assert_eq!(
-            artist._get_tags().await.unwrap(),
+            artist.get_tags(pool).await.unwrap(),
             ["pop", "female vocalists", "dance", "k-pop", "spanish",]
         )
     }

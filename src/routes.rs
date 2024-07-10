@@ -11,6 +11,7 @@ use crate::charts::Period;
 use crate::charts::User;
 use crate::error_500;
 use crate::get_api_key;
+use crate::get_random_artist;
 use crate::html;
 use crate::store_api_key;
 use crate::ArtistTree;
@@ -69,13 +70,19 @@ async fn login(
 
 #[get("/artists/")]
 pub async fn search_artists(pool: web::Data<SqPool>) -> actix_web::Result<Markup> {
-    // TODO: button for random artist (htmx?)
     // https://github.com/sekunho/emojied/blob/8b08f35ab237eb1d2417e68f92f0337fc7868c1b/src/views/url.rs#L54
+
+    // TODO: button for random artist (htmx?)
+    let _rand = get_random_artist(&pool)
+        .await
+        .map_err(error_500)?
+        .unwrap_or("".to_owned());
 
     let key = get_api_key(&pool).await.map_err(error_500)?;
 
     let html = html! {
         (html::header("Artists"))
+        // (rand)
         @if key.is_none() {
             (html::api_key_form("/artists/"))
         } @else {

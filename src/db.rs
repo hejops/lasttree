@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use indexmap::IndexMap;
+use serde_json::json;
+use serde_json::Value;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Pool;
@@ -41,7 +43,6 @@ pub struct ArtistPair {
 }
 
 impl Artist {
-    //{{{
     /// Query `artists` table (which is much faster than `artist_pairs`)
     pub async fn canonical_name(
         &self,
@@ -61,6 +62,8 @@ impl Artist {
         Ok(row.map(|r| r.name))
     }
 
+    /// `canon_name` should be derived from last.fm. It is the caller's
+    /// responsibility to obtain this.
     pub async fn store(
         &self,
         pool: &SqPool,
@@ -80,7 +83,8 @@ impl Artist {
         Ok(())
     }
 
-    pub async fn store_with_listeners(
+    // listeners {{{
+    pub async fn store_listeners(
         &self,
         pool: &SqPool,
         listeners: u32,
@@ -103,7 +107,7 @@ impl Artist {
         Ok(())
     }
 
-    pub async fn get_with_listeners(
+    pub async fn get_listeners_db(
         &self,
         pool: &SqPool,
         // 2 Options: row may not exist, listeners field may be null
@@ -120,7 +124,9 @@ impl Artist {
         .await?;
         Ok(row.map(|r| r.listeners))
     }
+    //}}}
 
+    // similars {{{
     pub async fn get_artist_pairs(
         &self,
         pool: &SqPool,
@@ -216,10 +222,76 @@ impl Artist {
         .await
         .unwrap();
         Ok(())
-    }
-} //}}}
+    } //}}}
 
-// {{{
+    /// Because `serde_json::json!` is used for json serialisation, SQLite's
+    /// `json()` is unnecessary
+    // https://www.sqlite.org/json1.html#jmini
+    pub async fn store_tags(
+        &self,
+        pool: &SqPool,
+        tags: &Vec<String>,
+    ) -> sqlx::Result<()> {
+        // let canon = self.canonical_name(pool).await?.context("fjdaks").unwrap();
+        // self.store(pool, &canon).await?;
+
+        let name = self.name.to_lowercase();
+        let tags = json!(tags);
+
+        sqlx::query!(
+            r#"
+            UPDATE artists
+            SET tags = $1
+            WHERE name_lower = $2
+            "#,
+            tags,
+            name
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_tags_db(
+        &self,
+        pool: &SqPool,
+    ) -> sqlx::Result<Option<Vec<String>>> {
+        // ) -> sqlx::Result<()> {
+        let name = self.name.to_lowercase();
+
+        // this is how to use sqlite json, apparently
+        let row = sqlx::query!(
+            r#"
+            -- https://docs.rs/sqlx/latest/sqlx/macro.query.html#force-not-null
+            SELECT tags as "tags!: Value"
+            FROM artists
+            WHERE name_lower = $1
+            "#,
+            name
+        )
+        .fetch_optional(pool)
+        .await?;
+
+        // do away with double Option
+        let tags = row.map(|row| serde_json::from_value::<Vec<String>>(row.tags).unwrap());
+        Ok(tags)
+    }
+}
+
+pub async fn get_random_artist(pool: &SqPool) -> sqlx::Result<Option<String>> {
+    let row = sqlx::query!(
+        r#"
+        SELECT name FROM artists
+        ORDER BY RANDOM() LIMIT 1
+        "#,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| r.name))
+}
+
+// api key {{{
 // if self-hosting, a single api key is enough, and we don't need a proper
 // login/authentication procedure
 pub async fn get_api_key(pool: &SqPool) -> sqlx::Result<Option<String>> {
@@ -265,3 +337,26 @@ pub async fn delete_api_key(pool: &SqPool) -> sqlx::Result<()> {
     Ok(())
 }
 //}}}
+
+#[cfg(test)]
+mod tests {
+    use crate::artists::Artist;
+    use crate::tests::TestPool;
+    use crate::LASTFM_KEY;
+
+    #[tokio::test]
+    async fn tags() {
+        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
+        let a = Artist::new("foo");
+
+        a.store(pool, "Foo").await.unwrap();
+
+        let tags: Vec<String> = vec!["A", "B", "C"]
+            .into_iter()
+            .map(|s| s.to_owned())
+            .collect();
+
+        a.store_tags(pool, &tags).await.unwrap();
+        assert_eq!(tags, a.get_tags_db(pool).await.unwrap().unwrap());
+    }
+}
