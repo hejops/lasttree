@@ -8,6 +8,7 @@ use serde::Deserializer;
 use serde_json::Value;
 use strum::IntoEnumIterator;
 
+// use crate::artists;
 use crate::artists::Artist;
 use crate::html;
 use crate::utils::build_lastfm_url;
@@ -51,6 +52,12 @@ impl ChartArtist {
         pool: &SqPool,
     ) -> anyhow::Result<u32> {
         Artist::new(&self.name).get_listeners(pool).await
+    }
+    async fn get_tags(
+        &self,
+        pool: &SqPool,
+    ) -> anyhow::Result<Vec<String>> {
+        Artist::new(&self.name).get_tags(pool).await
     }
 }
 
@@ -120,6 +127,8 @@ impl Chart {
                 th {"Artist"}
                 th {"Plays"}
                 th {"Listeners"}
+                th {"Tags"}
+
                 @for artist in &self.artists {
                     @let name = &artist.name;
                     // @let link = library_link(user, name.clone());
@@ -129,7 +138,8 @@ impl Chart {
                         (html::link(&link, name).into()),
                         artist.playcount.to_string(),
                         // TODO: plays as % of total plays in the current period
-                        human_number(artist.get_listeners(pool).await.unwrap_or(0))
+                        human_number(artist.get_listeners(pool).await.unwrap_or(0)),
+                        artist.get_tags(pool).await.unwrap_or(vec![]).join(", "),
                     ];
                     (html::table_row(cols))
                 }

@@ -155,17 +155,22 @@ impl Artist {
         &self,
         pool: &SqPool,
     ) -> anyhow::Result<u32> {
-        if let Ok(Some(Some(x))) = self.get_listeners_db(pool).await {
+        if let Ok(Some(x)) = self.get_listeners_db(pool).await {
             return Ok(x.try_into()?);
         };
 
         let url = build_lastfm_url("artist.getinfo", &LASTFM_KEY, &[("artist", &self.name)])?;
         let json = get_json(url.as_ref()).await?;
 
+        // println!("{:#?}", json);
+        // panic!();
+
         let listeners: String =
             serde_json::from_value(json["artist"]["stats"]["listeners"].clone())?;
         let listeners: u32 = listeners.parse()?;
 
+        let canon_name: String = serde_json::from_value(json["artist"]["name"].clone())?;
+        self.store(pool, &canon_name).await?;
         self.store_listeners(pool, listeners).await?;
 
         Ok(listeners)
@@ -175,16 +180,16 @@ impl Artist {
         &self,
         pool: &SqPool,
     ) -> anyhow::Result<Vec<String>> {
-        // if let Ok(Some(Some(x))) = self.get_with_listeners(pool).await {
-        //     return Ok(x.try_into()?);
-        // };
+        if let Ok(Some(tags)) = self.get_tags_db(pool).await {
+            return Ok(tags);
+        };
 
         let url = build_lastfm_url("artist.getinfo", &LASTFM_KEY, &[("artist", &self.name)])?;
         let json = get_json(url.as_ref()).await?;
 
         let tags: Vec<Value> = serde_json::from_value(json["artist"]["tags"]["tag"].clone())?;
 
-        // custom deserializer might help
+        // TODO: custom deserializer might help
         let tags = tags
             .iter()
             .map(|tag| serde_json::from_value::<String>(tag["name"].clone()).unwrap())

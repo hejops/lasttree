@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::Context;
+// use anyhow::Context;
 use indexmap::IndexMap;
 use serde_json::json;
 use serde_json::Value;
@@ -62,8 +62,8 @@ impl Artist {
         Ok(row.map(|r| r.name))
     }
 
-    /// `canon_name` should be derived from last.fm. It is the caller's
-    /// responsibility to obtain this.
+    /// Add to db, skipping if it already exists. `canon_name` should be derived
+    /// by parsing last.fm json.
     pub async fn store(
         &self,
         pool: &SqPool,
@@ -87,10 +87,10 @@ impl Artist {
     pub async fn store_listeners(
         &self,
         pool: &SqPool,
+        // canon_name: &str,
         listeners: u32,
     ) -> sqlx::Result<()> {
-        let canon = self.canonical_name(pool).await?.context("fjdaks").unwrap();
-        self.store(pool, &canon).await?;
+        // self.store(pool, canon_name).await?;
 
         let name = self.name.to_lowercase();
         sqlx::query!(
@@ -110,12 +110,12 @@ impl Artist {
     pub async fn get_listeners_db(
         &self,
         pool: &SqPool,
-        // 2 Options: row may not exist, listeners field may be null
-    ) -> sqlx::Result<Option<Option<i64>>> {
+    ) -> sqlx::Result<Option<i64>> {
         let name = self.name.to_lowercase();
         let row = sqlx::query!(
             r#"
-            SELECT listeners FROM artists
+            SELECT listeners as "listeners!"
+            FROM artists
             WHERE name_lower = $1
             "#,
             name
@@ -262,6 +262,7 @@ impl Artist {
         // this is how to use sqlite json, apparently
         let row = sqlx::query!(
             r#"
+            -- ! does away with double Option
             -- https://docs.rs/sqlx/latest/sqlx/macro.query.html#force-not-null
             SELECT tags as "tags!: Value"
             FROM artists
@@ -272,9 +273,7 @@ impl Artist {
         .fetch_optional(pool)
         .await?;
 
-        // do away with double Option
-        let tags = row.map(|row| serde_json::from_value::<Vec<String>>(row.tags).unwrap());
-        Ok(tags)
+        Ok(row.map(|row| serde_json::from_value::<Vec<String>>(row.tags).unwrap()))
     }
 }
 
