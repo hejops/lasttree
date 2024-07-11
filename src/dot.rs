@@ -1,3 +1,6 @@
+//! Convert `petgraph::Graph` to `graphviz_rust::dot_structures::Graph` for
+//! full control over styling.
+
 use graphviz_rust::attributes::color_name;
 use graphviz_rust::attributes::EdgeAttributes;
 use graphviz_rust::attributes::GraphAttributes;
@@ -66,25 +69,29 @@ impl ArtistTree {
 mod tests {
     use graphviz_rust::printer::DotPrinter;
     use graphviz_rust::printer::PrinterContext;
-    use itertools::Itertools;
+    use serde_json::json;
 
-    use crate::tests::TestPool;
     use crate::ArtistTree;
-    use crate::LASTFM_KEY;
 
     #[tokio::test]
     async fn basic_styling() {
-        // TODO: remove network requirement?
-        let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
-        let a = ArtistTree::new("loona").build_tree(pool).await.unwrap();
+        let graph = json!({
+            "edge_property":"directed",
+            "edges":[[0,1,100],[0,2,95],[0,3,86]],
+            // "node_holes":[],
+            "nodes":["Loona","LOOΠΔ 1/3","LOONA/yyxy","LOOΠΔ / ODD EYE CIRCLE"]
+        });
 
-        let dot = a
-            .as_dot()
-            .print(&mut PrinterContext::default())
-            .lines()
-            .take(9)
-            .join("\n");
-        // println!("{:?}", dot.lines().take(9).join("\n"));
+        let mut tree = ArtistTree::new("foo");
+        tree.graph = serde_json::from_value(graph).unwrap();
+
+        // not the most ergonomic API:
+        // pub fn as_dot(&self[.graph]) -> graphviz_rust::dot_structures::Graph
+        // ideally we want
+        // pub fn as_dot(graph: petgraph::Graph) -> graphviz_rust::dot_structures::Graph
+        // but i'll live with it for now
+
+        let dot = tree.as_dot().print(&mut PrinterContext::default());
         assert_eq!(
             dot,
             "\
@@ -96,7 +103,10 @@ digraph  {
   1[label=\"LOOΠΔ 1/3\",URL=\"/artists/LOOΠΔ 1/3\"]
   2[label=\"LOONA/yyxy\",URL=\"/artists/LOONA/yyxy\"]
   3[label=\"LOOΠΔ / ODD EYE CIRCLE\",URL=\"/artists/LOOΠΔ / ODD EYE CIRCLE\"]
-  0 -> 1 [label=\"100\"]"
+  0 -> 1 [label=\"100\"]
+  0 -> 2 [label=\"95\"]
+  0 -> 3 [label=\"86\"]
+}"
         );
     }
 }
