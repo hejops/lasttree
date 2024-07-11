@@ -95,8 +95,9 @@ mod tests {
 
     #[tokio::test]
     async fn search_artist_only() {
-        let audio = crate::player::search_youtube("maaya uchida").await.unwrap();
+        // a rather poor test, often not deterministic
+        let audio = crate::player::search_youtube("death grips").await.unwrap();
         assert_eq!(reqwest::get(&audio.link).await.unwrap().status(), 200);
-        assert_eq!(audio.uploader, "内田真礼（UCHIDA MAAYA）Official Channel");
+        assert_eq!(audio.uploader, "Death Grips");
     }
 }

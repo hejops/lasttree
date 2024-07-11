@@ -27,6 +27,28 @@ where
     actix_web::error::ErrorInternalServerError(e)
 }
 
+impl Artist {
+    pub async fn get_cached_similar_artists(
+        &self,
+        pool: &SqPool,
+    ) -> anyhow::Result<Option<IndexMap<String, i64>>> {
+        match self.get_artist_pairs(pool).await? {
+            Some(pairs) => {
+                // let map = IndexMap::from_iter(
+                //     pairs.into_iter().map(|pair| (pair.child, pair.similarity)),
+                // );
+
+                // for-loop is more readable
+                let mut map = IndexMap::new();
+                for pair in pairs {
+                    map.insert(pair.child, pair.similarity);
+                }
+                Ok(Some(map))
+            }
+            None => Ok(None),
+        }
+    }
+}
 // #[derive(Debug)]
 // raw json -> IndexMap (+ db rows) -> Graph -> Dot -> html
 // TODO: at some point, this should be made a (public) field of Artist
@@ -40,8 +62,8 @@ pub struct ArtistTree {
 
     // TODO:
     // pub nodes: IndexMap<Artist, NodeIndex>,
-    /// `IndexMap` is used to preserve insertion order of nodes (`HashMap` and
-    /// `BTreeMap` have consequences).
+    /// `IndexMap` is used to preserve insertion order of nodes (`HashMap`s are
+    /// unordered, and `BTreeMap`s are always (lexicographically) sorted).
     nodes: IndexMap<String, NodeIndex>,
 
     #[allow(dead_code)]
@@ -262,7 +284,7 @@ mod tests {
         let pool = &TestPool::new(Some(&LASTFM_KEY)).await.pool;
         let tree = ArtistTree::new("metallica").build_tree(pool).await.unwrap();
         let sim = tree.get_child_similarity("Annihilator");
-        // this number is not fixed!
+        // non-deterministic
         assert!((50..=55).contains(&sim));
     }
 }

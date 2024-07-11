@@ -1,9 +1,6 @@
 use std::str::FromStr;
 
-// use anyhow::Context;
-use indexmap::IndexMap;
 use serde_json::json;
-use serde_json::Value;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Pool;
@@ -43,7 +40,6 @@ pub struct ArtistPair {
 }
 
 impl Artist {
-    /// Query `artists` table (which is much faster than `artist_pairs`)
     pub async fn canonical_name(
         &self,
         pool: &SqPool,
@@ -52,6 +48,7 @@ impl Artist {
         let row = sqlx::query!(
             r#"
             SELECT name FROM artists
+            -- WHERE name = $1 COLLATE NOCASE
             WHERE name_lower = $1
         "#,
             lower,
@@ -74,6 +71,8 @@ impl Artist {
             r#"
             INSERT OR IGNORE INTO artists (name, name_lower)
             VALUES ($1, $2)
+            -- INSERT OR IGNORE INTO artists (name)
+            -- VALUES ($1)
         "#,
             canon_name,
             lower,
@@ -87,16 +86,14 @@ impl Artist {
     pub async fn store_listeners(
         &self,
         pool: &SqPool,
-        // canon_name: &str,
         listeners: u32,
     ) -> sqlx::Result<()> {
-        // self.store(pool, canon_name).await?;
-
         let name = self.name.to_lowercase();
         sqlx::query!(
             r#"
             UPDATE artists
             SET listeners = $1
+            -- WHERE name = $2 COLLATE NOCASE
             WHERE name_lower = $2
             "#,
             listeners,
@@ -114,8 +111,12 @@ impl Artist {
         let name = self.name.to_lowercase();
         let row = sqlx::query!(
             r#"
+            -- ! does away with double Option
+            -- https://docs.rs/sqlx/latest/sqlx/macro.query.html#force-not-null
+            -- what happens if column -is- null? idk
             SELECT listeners as "listeners!"
             FROM artists
+            -- WHERE name = $1 COLLATE NOCASE
             WHERE name_lower = $1
             "#,
             name
@@ -127,6 +128,7 @@ impl Artist {
     //}}}
 
     // similars {{{
+    /// Return pairs in descending similarity
     pub async fn get_artist_pairs(
         &self,
         pool: &SqPool,
@@ -140,11 +142,8 @@ impl Artist {
                 child,
                 similarity
             FROM artist_pairs
-            WHERE $1
-            -- https://stackoverflow.com/a/13916417
-            -- IN (parent_lower, child_lower);
-            -- = parent_lower;
-            = parent;
+            -- WHERE parent = $1 COLLATE NOCASE
+            WHERE parent = $1
         "#,
             name,
         )
@@ -166,29 +165,6 @@ impl Artist {
                 Some(pairs)
             }
         })
-    }
-
-    /// `canon` must be found in `artists` table. This allows the hashmap to be
-    /// built without making any network requests.
-    pub async fn get_cached_similar_artists(
-        &self,
-        pool: &SqPool,
-    ) -> anyhow::Result<Option<IndexMap<String, i64>>> {
-        match self.get_artist_pairs(pool).await? {
-            Some(pairs) => {
-                // let map = IndexMap::from_iter(
-                //     pairs.into_iter().map(|pair| (pair.child, pair.similarity)),
-                // );
-
-                // for-loop is more readable
-                let mut map = IndexMap::new();
-                for pair in pairs {
-                    map.insert(pair.child, pair.similarity);
-                }
-                Ok(Some(map))
-            }
-            None => Ok(None),
-        }
     }
 
     /// `parent` and `child` must both be canonical names.
@@ -242,6 +218,7 @@ impl Artist {
             r#"
             UPDATE artists
             SET tags = $1
+            -- WHERE name = $2 COLLATE NOCASE
             WHERE name_lower = $2
             "#,
             tags,
@@ -256,16 +233,17 @@ impl Artist {
         &self,
         pool: &SqPool,
     ) -> sqlx::Result<Option<Vec<String>>> {
-        // ) -> sqlx::Result<()> {
         let name = self.name.to_lowercase();
 
-        // this is how to use sqlite json, apparently
         let row = sqlx::query!(
             r#"
-            -- ! does away with double Option
-            -- https://docs.rs/sqlx/latest/sqlx/macro.query.html#force-not-null
-            SELECT tags as "tags!: Value"
+            -- this is how to select sqlite json properly
+            -- (otherwise 'unsupported type NULL')
+            -- https://docs.rs/sqlx/latest/sqlx/macro.query.html#force-a-differentcustom-type
+            -- note: deserialized must still be done separately
+            SELECT tags as "tags!: serde_json::Value"
             FROM artists
+            -- WHERE name = $1 COLLATE NOCASE
             WHERE name_lower = $1
             "#,
             name
